@@ -391,7 +391,5 @@ def get_all_tools():
         # Skill system
         list_skills,
         get_skill,
-        # install_skill,
-        # search_skills_online,
         execute_skill_script,
     ]
