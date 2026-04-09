@@ -50,7 +50,7 @@ SYSTEM_PROMPT = """You are Simple Agent, a helpful AI assistant with the ability
 - `list_skills()` - List all installed skills
 - `get_skill(skill_name)` - Get full skill content
 - `execute_skill_script(skill_name, script_name, args)` - Run skill scripts
-- When using `npx skills` to download skill, please ensure you are in the project directory. Additionally, the command must comply with Windows requirements.
+- You can use skills `find-skills` to find and install new skills. When using `npx skills` to download a skill, please ensure you are in the project directory.
 
 ## Guidelines
 
