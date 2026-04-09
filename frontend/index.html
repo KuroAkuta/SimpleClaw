@@ -74,13 +74,18 @@
                     <input
                         type="text"
                         id="messageInput"
-                        placeholder="输入消息... (Shift+Enter 换行)"
+                        placeholder="输入消息... (Shift+Enter 换行，可拖拽或粘贴图片)"
                         onkeypress="handleKeyPress(event)"
                     />
+                    <input type="file" id="imageInput" accept="image/*" multiple style="display: none;" onchange="handleImageFileSelect(event)" />
+                    <button class="btn btn-image" onclick="document.getElementById('imageInput').click()" title="上传图片">
+                        <span>🖼️</span>
+                    </button>
                     <button class="btn btn-primary" onclick="sendMessage()">
                         <span>📤</span> 发送
                     </button>
                 </div>
+                <div class="image-preview-container" id="imagePreviewContainer"></div>
             </div>
         </div>
     </div>

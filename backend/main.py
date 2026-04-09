@@ -305,6 +305,8 @@ sessions: Dict[str, Dict[str, Any]] = {}
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    images: Optional[List[str]] = None  # List of base64 encoded images
+    images: Optional[List[str]] = None  # List of base64 encoded images
 
 
 class ChatResponse(BaseModel):
@@ -378,8 +380,21 @@ async def chat(request: ChatRequest):
         "tool_call_confirmed": False,
     }
 
-    # Add user message
-    state["messages"].append(HumanMessage(content=request.message))
+    # Add user message with images if present
+    if request.images and len(request.images) > 0:
+        # Build message content with text and images
+        content = [{"type": "text", "text": request.message}]
+        for img_base64 in request.images:
+            # Remove data:image prefix if present
+            if img_base64.startswith("data:image"):
+                img_base64 = img_base64.split(",")[1]
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}
+            })
+        state["messages"].append(HumanMessage(content=content))
+    else:
+        state["messages"].append(HumanMessage(content=request.message))
 
     # Run agent
     graph = build_graph()
@@ -429,8 +444,21 @@ async def chat_stream(request: ChatRequest):
         "pending_tool_calls": None,
     }
 
-    # Add user message
-    state["messages"].append(HumanMessage(content=request.message))
+    # Add user message with images if present
+    if request.images and len(request.images) > 0:
+        # Build message content with text and images
+        content = [{"type": "text", "text": request.message}]
+        for img_base64 in request.images:
+            # Remove data:image prefix if present
+            if img_base64.startswith("data:image"):
+                img_base64 = img_base64.split(",")[1]
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}
+            })
+        state["messages"].append(HumanMessage(content=content))
+    else:
+        state["messages"].append(HumanMessage(content=request.message))
 
     async def generate():
             import anyio
@@ -522,7 +550,19 @@ async def get_messages(session_id: str):
     messages = []
     for msg in session["state"].get("messages", []):
         if isinstance(msg, HumanMessage):
-            messages.append({"role": "user", "content": msg.content})
+            # Handle multi-modal content (list of dicts)
+            content = msg.content
+            if isinstance(content, list):
+                # Convert to serializable format
+                serialized_content = []
+                for item in content:
+                    if isinstance(item, dict):
+                        serialized_content.append(item)
+                    else:
+                        serialized_content.append({"type": "text", "text": str(item)})
+                messages.append({"role": "user", "content": serialized_content})
+            else:
+                messages.append({"role": "user", "content": content})
         elif isinstance(msg, AIMessage):
             # Include all AI messages that have content (regardless of tool_calls)
             # tool_calls being present doesn't mean the message isn't a response

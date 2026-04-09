@@ -4,6 +4,7 @@ let currentSessionId = null;
 let isStreaming = false;
 let waitingForConfirmation = false;
 let pendingToolCalls = null;
+let pendingImages = []; // 待发送的图片（base64）
 
 // Configure marked
 marked.setOptions({
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     createStars();
     loadSessions();
     updateStatus('disconnected');
+    initImageUpload();
 });
 
 // Status updates
@@ -153,7 +155,20 @@ function renderMessages(messages) {
     const container = document.getElementById('messages');
     container.innerHTML = messages.map(msg => {
         if (msg.role === 'user') {
-            return `<div class="message user">${escapeHtml(msg.content)}</div>`;
+            // Handle multi-modal content (array with text and images)
+            let contentHtml = '';
+            if (Array.isArray(msg.content)) {
+                msg.content.forEach(item => {
+                    if (item.type === 'text') {
+                        contentHtml += `<p>${escapeHtml(item.text)}</p>`;
+                    } else if (item.type === 'image_url' && item.image_url?.url) {
+                        contentHtml += `<img src="${item.image_url.url}" class="message-image" />`;
+                    }
+                });
+            } else {
+                contentHtml = `<p>${escapeHtml(msg.content)}</p>`;
+            }
+            return `<div class="message user">${contentHtml}</div>`;
         } else if (msg.role === 'assistant') {
             return `<div class="message assistant">${marked.parse(msg.content)}</div>`;
         } else if (msg.role === 'tool') {
@@ -195,14 +210,44 @@ async function sendMessage() {
     const input = document.getElementById('messageInput');
     const message = input.value.trim();
 
-    if (!message || isStreaming) return;
+    if ((!message || message === '') && pendingImages.length === 0 || isStreaming) return;
     if (!currentSessionId) {
         await newSession();
     }
 
-    // Add user message to UI
-    addMessage(message, 'user');
+    // Add user message to UI (with images if present)
+    if (pendingImages.length > 0) {
+        // Render message with images
+        const container = document.getElementById('messages');
+        const emptyState = container.querySelector('.empty-state');
+        if (emptyState) emptyState.remove();
+
+        const div = document.createElement('div');
+        div.className = 'message user message-with-images';
+
+        let imagesHtml = pendingImages.map(img => `<img src="${img}" class="message-image" />`).join('');
+        let messageText = message ? `<p>${escapeHtml(message)}</p>` : '';
+        div.innerHTML = imagesHtml + messageText;
+
+        container.appendChild(div);
+        scrollToBottom();
+    } else {
+        addMessage(message, 'user');
+    }
+
+    // Prepare images for API (strip data:image prefix)
+    const imagesForApi = pendingImages.map(img => {
+        if (img.startsWith('data:image')) {
+            return img.split(',')[1];
+        }
+        return img;
+    });
+
+    const messageToSend = message || '(Image attached)';
     input.value = '';
+
+    // Clear images from preview area immediately after sending
+    clearImages();
 
     // Create placeholder for AI response
     const aiMessageDiv = addMessage('', 'assistant');
@@ -218,8 +263,9 @@ async function sendMessage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                message: message,
-                session_id: currentSessionId
+                message: messageToSend,
+                session_id: currentSessionId,
+                images: imagesForApi.length > 0 ? imagesForApi : undefined
             })
         });
 
@@ -574,4 +620,86 @@ function escapeHtml(text) {
 function scrollToBottom() {
     const container = document.getElementById('messages');
     container.scrollTop = container.scrollHeight;
+}
+
+// ==================== Image Upload Functions ====================
+
+function initImageUpload() {
+    const messagesContainer = document.getElementById('messages');
+    const inputContainer = document.querySelector('.input-container');
+
+    // Drag over
+    inputContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        inputContainer.classList.add('drag-over');
+    });
+
+    // Drag leave
+    inputContainer.addEventListener('dragleave', () => {
+        inputContainer.classList.remove('drag-over');
+    });
+
+    // Drop
+    inputContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        inputContainer.classList.remove('drag-over');
+        const files = e.dataTransfer.files;
+        handleFiles(files);
+    });
+
+    // Paste
+    document.addEventListener('paste', (e) => {
+        const items = e.clipboardData.items;
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                handleFiles([file]);
+                break;
+            }
+        }
+    });
+}
+
+function handleFiles(files) {
+    for (let file of files) {
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                pendingImages.push(e.target.result);
+                renderImagePreviews();
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+}
+
+function handleImageFileSelect(event) {
+    const files = event.target.files;
+    handleFiles(files);
+    event.target.value = ''; // Reset input
+}
+
+function renderImagePreviews() {
+    const container = document.getElementById('imagePreviewContainer');
+    if (pendingImages.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = pendingImages.map((img, index) => `
+        <div class="image-preview-item">
+            <img src="${img}" alt="preview" />
+            <button class="btn-remove-image" onclick="removeImage(${index})">×</button>
+        </div>
+    `).join('');
+}
+
+function removeImage(index) {
+    pendingImages.splice(index, 1);
+    renderImagePreviews();
+}
+
+function clearImages() {
+    pendingImages = [];
+    renderImagePreviews();
 }
