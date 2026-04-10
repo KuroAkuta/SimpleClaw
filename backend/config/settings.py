@@ -28,6 +28,16 @@ class Settings:
     CUSTOM_BASE_URL = os.getenv("CUSTOM_BASE_URL", "")
     CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY", "")
 
+    # Embedding configuration
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "")
+    EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
+
+    # Reranker configuration
+    RERANKER_MODEL = os.getenv("RERANKER_MODEL", "")
+    RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "")
+    RERANKER_API_KEY = os.getenv("RERANKER_API_KEY", "")
+
     # Agent limits
     MAX_TURNS = int(os.getenv("MAX_TURNS", "50"))
 

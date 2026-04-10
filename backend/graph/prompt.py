@@ -12,9 +12,12 @@ from config.settings import settings
 from tools import list_skills
 
 
-def get_system_prompt() -> str:
+def get_system_prompt(rag_context: str = "") -> str:
     """
     Get the system prompt with dynamic context values.
+
+    Args:
+        rag_context: Optional context retrieved from knowledge bases
 
     Returns:
         Formatted system prompt string
@@ -38,7 +41,8 @@ def get_system_prompt() -> str:
         skills_dir=skills_dir,
         current_time=current_time,
         identity=identity_content,
-        skills_list=skills_list
+        skills_list=skills_list,
+        rag_context=rag_context
     )
 
 
@@ -49,7 +53,7 @@ SYSTEM_PROMPT = """{identity}
 - Skills Directory: {skills_dir}
 - Current Time: {current_time}
 - Available Skills: {skills_list}
-
+- RAG Context: {rag_context}
 You have the ability to:
 
 1. **Execute local commands** - Use `run_command` to run shell commands

@@ -49,7 +49,10 @@ Thumbs.db
 # backend/.agents/skills/
 
 
-# 或者保留 .gitkeep
+
 backend/workspace/*
 !backend/workspace/.gitkeep
 !backend/workspace/**/
+
+backend/storage/*
+!backend/storage/.gitkeep

@@ -14,7 +14,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import chat_router, sessions_router, tools_router
+from routes import chat_router, sessions_router, tools_router, knowledge_router
 
 
 # =============================================================================
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(sessions_router)
 app.include_router(tools_router)
+app.include_router(knowledge_router)
 
 
 # =============================================================================

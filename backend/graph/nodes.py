@@ -14,6 +14,42 @@ from config.settings import settings  # noqa: F401 - for future use
 from models.state import AgentState
 from services.model_service import get_model_with_tools
 from graph.prompt import get_system_prompt
+from services.document_indexer import DocumentIndexer
+
+
+async def rag_retrieval_node(state: AgentState) -> Dict:
+    """
+    RAG retrieval node: searches enabled knowledge bases for relevant context.
+
+    This node runs before the agent node to inject relevant knowledge base
+    context into the system prompt.
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        Updated state with rag_context
+    """
+    kb_ids = state.get("enabled_knowledge_bases", [])
+
+    if not kb_ids:
+        return {"rag_context": ""}
+
+    try:
+        indexer = DocumentIndexer()
+        last_user_msg = state["messages"][-1].content if state["messages"] else ""
+
+        if not last_user_msg:
+            return {"rag_context": ""}
+
+        context = indexer.get_context_string(kb_ids, last_user_msg, k_per_kb=2, use_rerank=True, top_n=5)
+
+        return {"rag_context": context}
+
+    except Exception as e:
+        # Log error but don't fail the entire flow
+        print(f"RAG retrieval error: {e}")
+        return {"rag_context": ""}
 
 
 async def agent_node(state: AgentState) -> Dict:
@@ -21,7 +57,7 @@ async def agent_node(state: AgentState) -> Dict:
     Agent node that processes user messages and generates responses.
 
     This node:
-    1. Creates a system message with current context
+    1. Creates a system message with current context (including RAG)
     2. Calls the LLM with tools bound
     3. Handles tool call detection and confirmation flow
 
@@ -33,8 +69,11 @@ async def agent_node(state: AgentState) -> Dict:
     """
     model_with_tools = get_model_with_tools()
 
+    # Get RAG context if available
+    rag_context = state.get("rag_context", "")
+
     system_message = AIMessage(
-        content=get_system_prompt()
+        content=get_system_prompt(rag_context=rag_context)
     )
     messages = [system_message] + state["messages"]
 

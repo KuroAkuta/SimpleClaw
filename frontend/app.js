@@ -5,6 +5,11 @@ let isStreaming = false;
 let waitingForConfirmation = false;
 let pendingToolCalls = null;
 let pendingImages = []; // 待发送的图片（base64）
+let enabledKnowledgeBases = []; // 当前启用的知识库 ID 列表
+let allKnowledgeBases = []; // 所有知识库
+let currentDetailKbId = null; // 当前详情面板的知识库 ID
+let indexingPollInterval = null; // 索引状态轮询定时器
+let currentEditKbId = null; // 当前编辑的知识库 ID
 
 // Configure marked
 marked.setOptions({
@@ -70,6 +75,7 @@ function createStars() {
 document.addEventListener('DOMContentLoaded', () => {
     createStars();
     loadSessions();
+    loadKnowledgeBases();
     updateStatus('disconnected');
     initImageUpload();
 });
@@ -215,6 +221,10 @@ async function sendMessage() {
         await newSession();
     }
 
+    // 获取启用的知识库列表
+    const knowledgeBasesToSend = [...enabledKnowledgeBases];
+    console.log('Sending with knowledge bases:', knowledgeBasesToSend);
+
     // Add user message to UI (with images if present)
     if (pendingImages.length > 0) {
         // Render message with images
@@ -255,17 +265,18 @@ async function sendMessage() {
     isStreaming = true;
     updateStatus('thinking', '思考中...');
 
-    const messagesContainer = document.getElementById('messages');
     let streamDone = false;
 
     try {
+        const messagesContainer = document.getElementById('messages');
         const res = await fetch(`${API_BASE}/api/chat/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: messageToSend,
                 session_id: currentSessionId,
-                images: imagesForApi.length > 0 ? imagesForApi : undefined
+                images: imagesForApi.length > 0 ? imagesForApi : undefined,
+                enabled_knowledge_bases: knowledgeBasesToSend
             })
         });
 
@@ -622,6 +633,371 @@ function scrollToBottom() {
     container.scrollTop = container.scrollHeight;
 }
 
+// ==================== Knowledge Base Functions ====================
+
+// 切换知识库面板
+function toggleKnowledgePanel() {
+    const sidebar = document.getElementById('knowledgeSidebar');
+    sidebar.classList.toggle('collapsed');
+}
+
+// 加载知识库列表
+async function loadKnowledgeBases() {
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge`);
+        const data = await res.json();
+        allKnowledgeBases = data;
+        renderKnowledgeList();
+        renderKnowledgeSelector();
+    } catch (e) {
+        console.error('Failed to load knowledge bases:', e);
+    }
+}
+
+// 渲染知识库列表
+function renderKnowledgeList() {
+    const container = document.getElementById('knowledgeList');
+    if (allKnowledgeBases.length === 0) {
+        container.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;">暂无知识库<br/>点击 "+" 创建</div>';
+        return;
+    }
+
+    container.innerHTML = allKnowledgeBases.map(kb => `
+        <div class="knowledge-item" onclick="showKnowledgeDetail('${kb.id}')" style="cursor: pointer;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1; min-width: 0;">
+                    <span class="knowledge-item-name">📚 ${escapeHtml(kb.name)}</span>
+                    <span class="knowledge-item-meta">
+                        <span>${kb.documents ? kb.documents.length : 0} 文档</span>
+                        <span>${kb.total_chunks || 0} 分块</span>
+                    </span>
+                </div>
+                <div class="knowledge-item-actions" onclick="event.stopPropagation()">
+                    <button class="btn-icon btn-sm" onclick="editKnowledgeBase('${kb.id}')" title="编辑">✏️</button>
+                    <button class="btn-icon btn-sm delete" onclick="confirmDeleteKnowledgeBase('${kb.id}')" title="删除">🗑️</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 渲染知识库选择器（聊天时用）
+function renderKnowledgeSelector() {
+    const container = document.getElementById('knowledgeCheckboxes');
+    if (allKnowledgeBases.length === 0) {
+        container.innerHTML = '<span class="text-muted">暂无知识库</span>';
+        return;
+    }
+
+    container.innerHTML = allKnowledgeBases.map(kb => {
+        const isChecked = enabledKnowledgeBases.includes(kb.id);
+        return `
+            <label class="knowledge-checkbox ${isChecked ? 'checked' : ''}">
+                <input type="checkbox" value="${kb.id}" ${isChecked ? 'checked' : ''} onchange="toggleKnowledgeBase('${kb.id}', this.checked)">
+                ${escapeHtml(kb.name)}
+            </label>
+        `;
+    }).join('');
+}
+
+// 切换知识库启用状态
+function toggleKnowledgeBase(kbId, checked) {
+    if (checked) {
+        if (!enabledKnowledgeBases.includes(kbId)) {
+            enabledKnowledgeBases.push(kbId);
+        }
+    } else {
+        enabledKnowledgeBases = enabledKnowledgeBases.filter(id => id !== kbId);
+    }
+    renderKnowledgeSelector();
+}
+
+// 显示创建知识库 Modal
+function showCreateKnowledgeModal() {
+    document.getElementById('createKnowledgeModal').style.display = 'flex';
+}
+
+// 关闭创建知识库 Modal
+function closeCreateKnowledgeModal() {
+    document.getElementById('createKnowledgeModal').style.display = 'none';
+    document.getElementById('newKnowledgeName').value = '';
+    document.getElementById('newKnowledgeDesc').value = '';
+}
+
+// 创建知识库
+async function createKnowledgeBase() {
+    const name = document.getElementById('newKnowledgeName').value.trim();
+    const description = document.getElementById('newKnowledgeDesc').value.trim();
+
+    if (!name) {
+        alert('请输入知识库名称');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
+        });
+
+        if (!res.ok) throw new Error('创建失败');
+
+        await loadKnowledgeBases();
+        closeCreateKnowledgeModal();
+    } catch (e) {
+        alert('创建失败：' + e.message);
+    }
+}
+
+// 显示知识库详情
+async function showKnowledgeDetail(kbId) {
+    currentDetailKbId = kbId;
+    const kb = allKnowledgeBases.find(k => k.id === kbId);
+    if (!kb) return;
+
+    document.getElementById('knowledgeDetailTitle').textContent = kb.name;
+    document.getElementById('knowledgeDetailDesc').textContent = kb.description || '无描述';
+
+    document.getElementById('knowledgeDetailModal').style.display = 'flex';
+
+    // 加载索引状态和文档列表
+    await loadIndexingStatus(kbId);
+    await loadDocumentList(kbId);
+}
+
+// 关闭知识库详情 Modal
+function closeKnowledgeDetailModal() {
+    document.getElementById('knowledgeDetailModal').style.display = 'none';
+    // 清除轮询
+    if (indexingPollInterval) {
+        clearInterval(indexingPollInterval);
+        indexingPollInterval = null;
+    }
+    currentDetailKbId = null;
+}
+
+// 加载索引状态
+async function loadIndexingStatus(kbId) {
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${kbId}/index/status`);
+        const data = await res.json();
+
+        const container = document.getElementById('indexingStatus');
+        container.innerHTML = `
+            <div class="indexing-status-header">
+                <h4>索引状态</h4>
+                <span class="text-muted">策略：${data.indexing_strategy}</span>
+            </div>
+            <div class="status-breakdown">
+                <span class="status-item">
+                    <span class="status-dot pending"></span>
+                    待索引：${data.status_breakdown.pending}
+                </span>
+                <span class="status-item">
+                    <span class="status-dot indexing"></span>
+                    索引中：${data.status_breakdown.indexing}
+                </span>
+                <span class="status-item">
+                    <span class="status-dot indexed"></span>
+                    已完成：${data.status_breakdown.indexed}
+                </span>
+                <span class="status-item">
+                    <span class="status-dot failed"></span>
+                    失败：${data.status_breakdown.failed}
+                </span>
+            </div>
+            <div class="text-muted" style="margin-top: 0.5rem; font-size: 0.75rem;">
+                总分块：${data.total_chunks} | 最后索引：${data.last_indexed_at ? new Date(data.last_indexed_at).toLocaleString() : '从未'}
+            </div>
+        `;
+    } catch (e) {
+        document.getElementById('indexingStatus').innerHTML = '<span class="text-muted">加载状态失败</span>';
+    }
+}
+
+// 加载文档列表
+async function loadDocumentList(kbId) {
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${kbId}`);
+        const kb = await res.json();
+
+        const container = document.getElementById('documentList');
+        if (!kb.documents || kb.documents.length === 0) {
+            container.innerHTML = '<div class="text-muted" style="text-align: center; padding: 2rem;">暂无文档</div>';
+            return;
+        }
+
+        container.innerHTML = kb.documents.map(doc => `
+            <div class="document-item">
+                <div class="document-item-info">
+                    <span class="document-item-icon">📄</span>
+                    <div>
+                        <div class="document-item-name">${escapeHtml(doc.filename)}</div>
+                        <div class="document-item-meta">
+                            ${doc.size} bytes |
+                            <span class="document-status-badge ${doc.status}">${doc.status}</span>
+                            ${doc.chunk_count ? `| ${doc.chunk_count} 分块` : ''}
+                            ${doc.error_message ? `| ${escapeHtml(doc.error_message)}` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="document-item-actions">
+                    <button class="btn-icon" onclick="alert('文档预览功能开发中')" title="预览">👁️</button>
+                    <button class="btn-icon delete" onclick="deleteDocument('${kbId}', '${doc.id}')" title="删除">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById('documentList').innerHTML = '<span class="text-muted">加载文档列表失败</span>';
+    }
+}
+
+// 上传文档
+function uploadDocument() {
+    document.getElementById('documentUploadInput').click();
+}
+
+// 处理文档上传
+async function handleDocumentUpload(event) {
+    const file = event.target.files[0];
+    if (!file || !currentDetailKbId) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${currentDetailKbId}/documents`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '上传失败');
+        }
+
+        const result = await res.json();
+        alert(`文档 "${result.filename}" 上传成功`);
+
+        // 刷新列表
+        await loadKnowledgeBases();
+        await loadDocumentList(currentDetailKbId);
+        await loadIndexingStatus(currentDetailKbId);
+
+    } catch (e) {
+        alert('上传失败：' + e.message);
+    }
+
+    event.target.value = ''; // Reset input
+}
+
+// 触发索引
+async function triggerIndexing(strategy) {
+    if (!currentDetailKbId) return;
+
+    // 清除之前的轮询
+    if (indexingPollInterval) {
+        clearInterval(indexingPollInterval);
+    }
+
+    // 立即显示索引中状态
+    const indexingStatusEl = document.getElementById('indexingStatus');
+    if (indexingStatusEl) {
+        indexingStatusEl.innerHTML = `
+            <div class="indexing-status-header">
+                <h4>索引中...</h4>
+            </div>
+            <div style="text-align: center; padding: 2rem;">
+                <div class="spinner" style="width: 40px; height: 40px; border: 3px solid var(--border-color); border-top-color: var(--accent-gold); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem;"></div>
+                <p class="text-muted">正在向量化文档，请稍候...</p>
+            </div>
+        `;
+    }
+
+    // 启动轮询，每 2 秒刷新一次状态
+    indexingPollInterval = setInterval(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/knowledge/${currentDetailKbId}/index/status`);
+            const data = await res.json();
+
+            // 检查是否还有待索引或索引中的文档
+            const hasPendingOrIndexing = data.status_breakdown.pending > 0 || data.status_breakdown.indexing > 0;
+
+            if (!hasPendingOrIndexing) {
+                // 索引完成，停止轮询并刷新完整状态
+                if (indexingPollInterval) {
+                    clearInterval(indexingPollInterval);
+                    indexingPollInterval = null;
+                }
+                // 刷新文档列表（清除错误消息）和状态
+                await loadDocumentList(currentDetailKbId);
+                await loadIndexingStatus(currentDetailKbId);
+                alert('索引完成！');
+            } else {
+                // 仍在索引中，仅更新状态显示（不刷新文档列表）
+                await loadIndexingStatus(currentDetailKbId);
+            }
+        } catch (e) {
+            console.error('Polling error:', e);
+        }
+    }, 2000);
+
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${currentDetailKbId}/index`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strategy })
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+            if (indexingPollInterval) {
+                clearInterval(indexingPollInterval);
+                indexingPollInterval = null;
+            }
+            throw new Error(result.detail || '索引失败');
+        }
+
+        // 索引请求成功，等待 500ms 后开始轮询检查状态
+        console.log('索引请求成功:', result.message);
+
+        // 延迟启动轮询，确保后端已开始处理
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+    } catch (e) {
+        if (indexingPollInterval) {
+            clearInterval(indexingPollInterval);
+            indexingPollInterval = null;
+        }
+        alert('索引失败：' + e.message);
+        // 刷新状态和文档列表以显示错误
+        await loadIndexingStatus(currentDetailKbId);
+        await loadDocumentList(currentDetailKbId);
+    }
+}
+
+// 删除文档
+async function deleteDocument(kbId, docId) {
+    if (!confirm('确定要删除此文档吗？')) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${kbId}/documents/${docId}`, {
+            method: 'DELETE'
+        });
+
+        if (!res.ok) throw new Error('删除失败');
+
+        await loadKnowledgeBases();
+        await loadDocumentList(kbId);
+        await loadIndexingStatus(kbId);
+
+    } catch (e) {
+        alert('删除失败：' + e.message);
+    }
+}
+
 // ==================== Image Upload Functions ====================
 
 function initImageUpload() {
@@ -702,4 +1078,99 @@ function removeImage(index) {
 function clearImages() {
     pendingImages = [];
     renderImagePreviews();
+}
+
+// ==================== Knowledge Base Edit & Delete Functions ====================
+
+// 编辑知识库
+async function editKnowledgeBase(kbId) {
+    currentEditKbId = kbId;
+    const kb = allKnowledgeBases.find(k => k.id === kbId);
+    if (!kb) return;
+
+    document.getElementById('editKnowledgeName').value = kb.name;
+    document.getElementById('editKnowledgeDesc').value = kb.description || '';
+
+    document.getElementById('editKnowledgeModal').style.display = 'flex';
+}
+
+// 关闭编辑知识库 Modal
+function closeEditKnowledgeModal() {
+    document.getElementById('editKnowledgeModal').style.display = 'none';
+    currentEditKbId = null;
+}
+
+// 保存编辑的知识库
+async function saveEditKnowledgeBase() {
+    if (!currentEditKbId) return;
+
+    const name = document.getElementById('editKnowledgeName').value.trim();
+    const description = document.getElementById('editKnowledgeDesc').value.trim();
+
+    if (!name) {
+        alert('请输入知识库名称');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${currentEditKbId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '保存失败');
+        }
+
+        await loadKnowledgeBases();
+        closeEditKnowledgeModal();
+
+        // 如果正在查看该知识库详情，也刷新详情
+        if (currentDetailKbId === currentEditKbId) {
+            await loadIndexingStatus(currentDetailKbId);
+        }
+
+    } catch (e) {
+        alert('保存失败：' + e.message);
+    }
+}
+
+// 确认删除知识库
+function confirmDeleteKnowledgeBase(kbId) {
+    if (!confirm('确定要删除此知识库吗？\n\n警告：此操作将删除知识库及其所有文档和索引数据，且无法恢复！')) {
+        return;
+    }
+    deleteKnowledgeBase(kbId);
+}
+
+// 删除知识库
+async function deleteKnowledgeBase(kbId) {
+    try {
+        const res = await fetch(`${API_BASE}/api/knowledge/${kbId}`, {
+            method: 'DELETE'
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '删除失败');
+        }
+
+        // 如果正在查看该知识库详情，关闭详情面板
+        if (currentDetailKbId === kbId) {
+            closeKnowledgeDetailModal();
+        }
+
+        // 从启用列表中移除
+        if (enabledKnowledgeBases.includes(kbId)) {
+            enabledKnowledgeBases = enabledKnowledgeBases.filter(id => id !== kbId);
+            renderKnowledgeSelector();
+        }
+
+        await loadKnowledgeBases();
+
+    } catch (e) {
+        alert('删除失败：' + e.message);
+    }
 }

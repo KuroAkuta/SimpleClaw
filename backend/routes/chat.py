@@ -77,6 +77,7 @@ async def chat(request: ChatRequest):
         "current_task": request.message,
         "turn_count": session["state"].get("turn_count", 0),
         "tool_call_confirmed": False,
+        "enabled_knowledge_bases": request.enabled_knowledge_bases or [],
     }
 
     # Add user message
@@ -112,6 +113,7 @@ async def chat_stream(request: ChatRequest):
         "turn_count": session["state"].get("turn_count", 0),
         "tool_call_confirmed": False,
         "pending_tool_calls": None,
+        "enabled_knowledge_bases": request.enabled_knowledge_bases or [],
     }
 
     # Add user message

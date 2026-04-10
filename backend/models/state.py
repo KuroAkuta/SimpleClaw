@@ -18,6 +18,8 @@ class AgentState(dict):
         turn_count: Number of conversation turns
         tool_call_confirmed: Whether user has confirmed pending tool calls
         pending_tool_calls: List of tool calls waiting for confirmation
+        enabled_knowledge_bases: List of enabled knowledge base IDs for RAG
+        rag_context: Retrieved context from knowledge bases
     """
     messages: Annotated[List[AnyMessage], add_messages]
     skill_context: Optional[str] = None
@@ -25,3 +27,5 @@ class AgentState(dict):
     turn_count: int = 0
     tool_call_confirmed: bool = False
     pending_tool_calls: Optional[List[Dict[str, Any]]] = None
+    enabled_knowledge_bases: List[str] = []
+    rag_context: str = ""

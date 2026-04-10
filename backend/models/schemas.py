@@ -11,6 +11,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     images: Optional[List[str]] = None  # List of base64 encoded images
+    enabled_knowledge_bases: List[str] = []  # Knowledge bases to use for RAG
 
 
 class ChatResponse(BaseModel):
@@ -58,3 +59,34 @@ class ToolConfirmResponse(BaseModel):
     success: bool
     status: str
     message: str
+
+
+# =============================================================================
+# Knowledge Base Schemas
+# =============================================================================
+
+class CreateKnowledgeBaseRequest(BaseModel):
+    """Request model for creating a knowledge base."""
+    name: str
+    description: Optional[str] = None
+
+
+class UpdateKnowledgeBaseRequest(BaseModel):
+    """Request model for updating a knowledge base."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    indexing_strategy: Optional[str] = None  # "incremental" or "full"
+
+
+class IndexingRequest(BaseModel):
+    """Request model for triggering indexing."""
+    strategy: str = "incremental"  # "incremental" or "full"
+    document_ids: Optional[List[str]] = None  # Specific docs to index
+
+
+class UploadFileResponse(BaseModel):
+    """Response model for file upload."""
+    document_id: str
+    filename: str
+    size: int
+    status: str

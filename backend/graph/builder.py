@@ -10,7 +10,7 @@ from langgraph.graph import StateGraph, START, END
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models.state import AgentState
-from graph.nodes import agent_node, tool_node, should_continue
+from graph.nodes import agent_node, tool_node, should_continue, rag_retrieval_node
 
 
 def build_graph():
@@ -18,17 +18,21 @@ def build_graph():
     Build and compile the LangGraph workflow.
 
     The graph structure:
-    1. Start -> agent node
-    2. Agent node -> conditional edges (tools/agent/end)
-    3. Tools node -> agent node (loop back for continued conversation)
+    1. Start -> RAG retrieval node (fetches knowledge base context)
+    2. RAG node -> agent node
+    3. Agent node -> conditional edges (tools/agent/end)
+    4. Tools node -> agent node (loop back for continued conversation)
 
     Returns:
         Compiled LangGraph ready for invocation
     """
     graph = StateGraph(AgentState)
+    graph.add_node("rag_retrieval", rag_retrieval_node)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", tool_node)
-    graph.add_edge(START, "agent")
+
+    graph.add_edge(START, "rag_retrieval")
+    graph.add_edge("rag_retrieval", "agent")
     graph.add_conditional_edges(
         "agent",
         should_continue,

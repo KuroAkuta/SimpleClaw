@@ -22,6 +22,13 @@
     <div class="header">
         <h1>Simple Agent</h1>
         <div class="header-actions">
+            <button class="btn btn-secondary" onclick="toggleKnowledgePanel()" title="知识库管理">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                知识库
+            </button>
             <button class="btn btn-secondary" onclick="loadSessions()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 21"/>
@@ -42,6 +49,23 @@
     </div>
 
     <div class="chat-container">
+        <!-- 知识库侧边栏 -->
+        <div class="knowledge-sidebar collapsed" id="knowledgeSidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-header-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    知识库
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="showCreateKnowledgeModal()">+</button>
+            </div>
+            <div class="knowledge-list" id="knowledgeList">
+                <!-- 知识库列表 -->
+            </div>
+        </div>
+
         <div class="sidebar">
             <div class="sidebar-header">
                 Sessions
@@ -70,6 +94,14 @@
             </div>
 
             <div class="input-container">
+                <!-- 知识库选择器 -->
+                <div class="knowledge-selector" id="knowledgeSelector">
+                    <span class="knowledge-selector-label">启用知识库:</span>
+                    <div class="knowledge-checkboxes" id="knowledgeCheckboxes">
+                        <span class="text-muted">暂无知识库</span>
+                    </div>
+                </div>
+
                 <div class="input-wrapper">
                     <input
                         type="text"
@@ -90,7 +122,107 @@
         </div>
     </div>
 
+    <!-- 创建知识库 Modal -->
+    <div id="createKnowledgeModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>创建新知识库</h3>
+                <button class="modal-close" onclick="closeCreateKnowledgeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>知识库名称</label>
+                    <input type="text" id="newKnowledgeName" placeholder="例如：项目文档" />
+                </div>
+                <div class="form-group">
+                    <label>描述（可选）</label>
+                    <textarea id="newKnowledgeDesc" placeholder="简要描述知识库用途" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCreateKnowledgeModal()">取消</button>
+                <button class="btn btn-primary" onclick="createKnowledgeBase()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑知识库 Modal -->
+    <div id="editKnowledgeModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>编辑知识库</h3>
+                <button class="modal-close" onclick="closeEditKnowledgeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>知识库名称</label>
+                    <input type="text" id="editKnowledgeName" placeholder="例如：项目文档" />
+                </div>
+                <div class="form-group">
+                    <label>描述（可选）</label>
+                    <textarea id="editKnowledgeDesc" placeholder="简要描述知识库用途" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeEditKnowledgeModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveEditKnowledgeBase()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 知识库详情 Modal -->
+    <div id="knowledgeDetailModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="knowledgeDetailTitle">知识库详情</h3>
+                <button class="modal-close" onclick="closeKnowledgeDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="knowledge-detail-header">
+                    <div class="knowledge-meta">
+                        <span id="knowledgeDetailDesc"></span>
+                    </div>
+                    <div class="knowledge-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="uploadDocument()">📄 上传文档</button>
+                        <input type="file" id="documentUploadInput" style="display: none;" onchange="handleDocumentUpload(event)" />
+                        <button class="btn btn-sm btn-primary" onclick="triggerIndexing('incremental')">增量索引</button>
+                        <button class="btn btn-sm btn-warning" onclick="triggerIndexing('full')">全量索引</button>
+                    </div>
+                </div>
+                <div class="indexing-status" id="indexingStatus">
+                    <!-- 索引状态 -->
+                </div>
+                <div class="document-list" id="documentList">
+                    <!-- 文档列表 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom App Script -->
     <script src="app.js"></script>
+    <script>
+        // Modal close handlers - click outside to close
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'createKnowledgeModal') {
+                closeCreateKnowledgeModal();
+            }
+            if (e.target.id === 'editKnowledgeModal') {
+                closeEditKnowledgeModal();
+            }
+            if (e.target.id === 'knowledgeDetailModal') {
+                closeKnowledgeDetailModal();
+            }
+        });
+
+        // Handle escape key to close modals
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeCreateKnowledgeModal();
+                closeEditKnowledgeModal();
+                closeKnowledgeDetailModal();
+            }
+        });
+    </script>
 </body>
 </html>
