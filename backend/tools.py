@@ -19,6 +19,14 @@ from langchain.tools import tool
 # Configuration
 # =============================================================================
 
+def get_workspace_dir() -> Path:
+    """Get the workspace directory (default working directory for tools)"""
+    script_dir = Path(__file__).parent
+    workspace_dir = script_dir / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    return workspace_dir
+
+
 def get_skills_dir() -> Path:
     """Get the skills directory (create if not exists)"""
     script_dir = Path(__file__).parent
@@ -51,51 +59,28 @@ def run_command(description: str, command: str) -> str:
     Returns:
         Command output (stdout + stderr)
     """
-    # Security: Define allowed working directory
-    allowed_cwd = Path(__file__).parent.resolve()
-
     # Security: Block dangerous patterns that could escape the working directory
     dangerous_patterns = [
-        # Directory traversal
-        '..',
         # Absolute paths (Windows and Unix)
         ':\\',  # Windows drive paths like C:\
-        '/etc/', '/home/', '/root/', '/tmp/', '/var/',  # Unix system dirs
-        'C:\\', 'D:\\', 'E:\\',  # Windows drive letters
         # Dangerous commands that could modify system state
         'rm -rf /', 'rm -rf /*',
         'format', 'diskpart',  # Windows disk commands
         'chmod 777', 'chown ', 'sudo ', 'su ',
-        # Environment/network attacks
-        # 'curl ', 'wget ', 'nc ', 'netcat ',
-        # 'ssh ', 'scp ', 'ftp ',
         # Data exfiltration
         'base64 ', 'xxd ', 'od ',
-        # # Process manipulation
-        # 'kill ', 'pkill ', 'killall ',
         # Privilege escalation
         'setuid', 'setgid', 'passwd ', 'useradd ', 'usermod ',
     ]
+
+    # Block directory traversal (but allow relative paths within workspace)
+    if '..' in command:
+        return "Error: Command blocked for security reasons - contains directory traversal '..'"
 
     cmd_lower = command.lower()
     for pattern in dangerous_patterns:
         if pattern.lower() in cmd_lower:
             return f"Error: Command blocked for security reasons - contains restricted pattern: '{pattern}'"
-
-    # Security: Check for absolute paths in common file operations
-    # Block commands that try to read files outside cwd
-    read_commands = ['cat ', 'type ', 'head ', 'tail ', 'less ', 'more ', 'grep ']
-    for cmd in read_commands:
-        if cmd in cmd_lower:
-            # Extract the path argument
-            parts = command.split(cmd, 1)[-1].strip().split()
-            for part in parts:
-                # Skip flags
-                if part.startswith('-'):
-                    continue
-                # Check if it's an absolute path or contains ..
-                if part.startswith('/') or ':' in part or '..' in part:
-                    return f"Error: Command blocked - cannot access files outside working directory: '{part}'"
 
     try:
         result = subprocess.run(
@@ -105,7 +90,7 @@ def run_command(description: str, command: str) -> str:
             text=True,
             encoding="utf-8", # 强制使用 utf-8 解码输出
             timeout=300,
-            cwd=str(allowed_cwd)
+            cwd=str(get_workspace_dir())
         )
         output = result.stdout
         if result.stderr:
@@ -138,7 +123,7 @@ def read_file(description: str, path: str) -> str:
     try:
         file_path = Path(path)
         if not file_path.is_absolute():
-            file_path = Path(__file__).parent / path
+            file_path = get_workspace_dir() / path
 
         if not file_path.exists():
             return f"Error: File not found: {path}"
@@ -164,7 +149,7 @@ def write_file(description: str, path: str, content: str) -> str:
     try:
         file_path = Path(path)
         if not file_path.is_absolute():
-            file_path = Path(__file__).parent / path
+            file_path = get_workspace_dir() / path
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
@@ -188,7 +173,7 @@ def list_directory(description: str, path: str = ".") -> str:
     try:
         dir_path = Path(path)
         if not dir_path.is_absolute():
-            dir_path = Path(__file__).parent / path
+            dir_path = get_workspace_dir() / path
 
         if not dir_path.exists():
             return f"Error: Directory not found: {path}"
@@ -219,7 +204,7 @@ def find_files(description: str, pattern: str = "*.py", path: str = ".") -> str:
     try:
         base_path = Path(path)
         if not base_path.is_absolute():
-            base_path = Path(__file__).parent / path
+            base_path = get_workspace_dir() / path
 
         if not base_path.exists():
             return f"Error: Directory not found: {path}"
@@ -389,7 +374,6 @@ def get_all_tools():
         list_directory,
         find_files,
         # Skill system
-        list_skills,
         get_skill,
         execute_skill_script,
     ]

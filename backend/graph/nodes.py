@@ -84,7 +84,7 @@ async def tool_node(state: AgentState) -> Dict:
     """
     from tools import (
         run_command, read_file, write_file, list_directory, find_files,
-        list_skills, get_skill, execute_skill_script,
+        get_skill, execute_skill_script,
     )
 
     tools_by_name = {
@@ -93,7 +93,6 @@ async def tool_node(state: AgentState) -> Dict:
         "write_file": write_file,
         "list_directory": list_directory,
         "find_files": find_files,
-        "list_skills": list_skills,
         "get_skill": get_skill,
         "execute_skill_script": execute_skill_script,
     }

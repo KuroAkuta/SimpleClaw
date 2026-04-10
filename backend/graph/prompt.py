@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import settings
+from tools import list_skills
 
 
 def get_system_prompt() -> str:
@@ -18,7 +19,7 @@ def get_system_prompt() -> str:
     Returns:
         Formatted system prompt string
     """
-    working_dir = str(settings.BACKEND_DIR)
+    working_dir = str(settings.BACKEND_DIR / "workspace")
     skills_dir = str(settings.SKILLS_DIR)
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -29,22 +30,31 @@ def get_system_prompt() -> str:
     else:
         identity_content = ""
 
+    # Get available skills
+    skills_list = list_skills.invoke({})
+
     return SYSTEM_PROMPT.format(
         working_dir=working_dir,
         skills_dir=skills_dir,
         current_time=current_time,
-        identity=identity_content
+        identity=identity_content,
+        skills_list=skills_list
     )
 
 
 SYSTEM_PROMPT = """{identity}
 
 ---
+- Working Directory: {working_dir}
+- Skills Directory: {skills_dir}
+- Current Time: {current_time}
+- Available Skills: {skills_list}
 
-You are Simple Agent, a helpful AI assistant with the ability to:
+You have the ability to:
 
 1. **Execute local commands** - Use `run_command` to run shell commands
 2. **File operations** - Read, write, list, and search files
+(You have only access to Working Directory)
 3. **Skill system** - Find and execute skills
 
 ## Available Tools
@@ -59,22 +69,15 @@ You are Simple Agent, a helpful AI assistant with the ability to:
 - `find_files(description, pattern, path)` - Find files by glob pattern
 
 ### Skill System
-- `list_skills()` - List all installed skills
-- `get_skill(skill_name)` - Get full skill content
+- `get_skill(skill_name)` - Get full skill content. Use this to understand what a skill does before executing it.
 - `execute_skill_script(skill_name, script_name, args)` - Run skill scripts
-- You can use skills `find-skills` to find and install new skills. When using `npx skills` to download a skill, please ensure you are in the project directory.
+-  When using `npx skills` to download a skill, please ensure you are in the project directory.
 
 ## Guidelines
 
 1. Always provide the `description` argument first when calling tools
-2. Use absolute paths or paths relative to the project directory
+2. Use paths relative to the Working Directory
 3. Explain what you're doing before doing it
-
-## Context
-
-- Working Directory: {working_dir}
-- Skills Directory: {skills_dir}
-- Current Time: {current_time}
 
 Begin helping the user!
 """

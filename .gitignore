@@ -47,3 +47,9 @@ Thumbs.db
 
 # Skills (optional - exclude if large or sensitive)
 # backend/.agents/skills/
+
+
+# 或者保留 .gitkeep
+backend/workspace/*
+!backend/workspace/.gitkeep
+!backend/workspace/**/
