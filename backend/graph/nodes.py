@@ -121,10 +121,11 @@ async def tool_node(state: AgentState) -> Dict:
     Returns:
         State with tool execution results
     """
-    from tools import (
+    from tools.basic_tools import (
         run_command, read_file, write_file, list_directory, find_files,
         get_skill, execute_skill_script,
     )
+    from tools.memory_tools import save_memory, load_memory, clear_memory
 
     tools_by_name = {
         "run_command": run_command,
@@ -134,6 +135,9 @@ async def tool_node(state: AgentState) -> Dict:
         "find_files": find_files,
         "get_skill": get_skill,
         "execute_skill_script": execute_skill_script,
+        "save_memory": save_memory,
+        "load_memory": load_memory,
+        "clear_memory": clear_memory,
     }
 
     last_message = state["messages"][-1]

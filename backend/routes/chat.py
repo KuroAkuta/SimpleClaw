@@ -217,10 +217,11 @@ async def chat_resume(request: ChatRequest):
         }
 
     # Execute pending tool calls
-    from tools import (
+    from tools.basic_tools import (
         run_command, read_file, write_file, list_directory, find_files,
         list_skills, get_skill, execute_skill_script,
     )
+    from tools.memory_tools import save_memory, load_memory, clear_memory
 
     tools_by_name = {
         "run_command": run_command,
@@ -231,6 +232,9 @@ async def chat_resume(request: ChatRequest):
         "list_skills": list_skills,
         "get_skill": get_skill,
         "execute_skill_script": execute_skill_script,
+        "save_memory": save_memory,
+        "load_memory": load_memory,
+        "clear_memory": clear_memory,
     }
 
     messages = state.get("messages", [])
