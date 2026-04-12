@@ -29,7 +29,7 @@ def get_workspace_dir() -> Path:
 
 def get_skills_dir() -> Path:
     """Get the skills directory (create if not exists)"""
-    script_dir = Path(__file__).parent
+    script_dir = Path(__file__).parent.parent
     skills_dir = script_dir / ".agents" / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
     return skills_dir
