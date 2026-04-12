@@ -8,6 +8,7 @@ from .basic_tools import (
     find_files,
     get_skill,
     execute_skill_script,
+    get_all_tools,  # Use the version from basic_tools that includes subagent tools
 )
 from .memory_tools import save_memory, load_memory, clear_memory
 
@@ -24,23 +25,3 @@ __all__ = [
     'clear_memory',
     'get_all_tools',
 ]
-
-
-def get_all_tools():
-    """Get all available tools."""
-    return [
-        # Bash
-        run_command,
-        # File operations
-        read_file,
-        write_file,
-        list_directory,
-        find_files,
-        # Skill system
-        get_skill,
-        execute_skill_script,
-        # Memory tools
-        save_memory,
-        load_memory,
-        clear_memory,
-    ]

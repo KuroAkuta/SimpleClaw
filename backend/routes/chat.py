@@ -123,6 +123,7 @@ async def chat_stream(request: ChatRequest):
         graph = build_graph()
         final_messages = list(state["messages"])
         accumulated_ai_content = ""
+        subagent_tasks_started = {}  # Track started subagent tasks: {tool_call_id: task_id}
 
         async for mode, event in graph.astream(state, stream_mode=["messages", "values"]):
             if mode == "messages":
@@ -150,6 +151,15 @@ async def chat_stream(request: ChatRequest):
                     if isinstance(last_msg, AIMessage):
                         has_tool_calls = getattr(last_msg, "tool_calls", [])
                         if has_tool_calls and not event.get("tool_call_confirmed", False):
+                            # Check for subagent task calls - only send subagent_started for async tasks
+                            # For sync tasks, show the float window after user confirms and execution completes
+                            for tool_call in has_tool_calls:
+                                tool_name = tool_call.get("name", "")
+                                tool_args = tool_call.get("args", {})
+
+                            # For sync tasks, we'll show the float window after tool execution completes
+                            # Don't send subagent_started here - wait until after user confirms in /chat/resume
+
                             yield {
                                 "event": "tool_pending",
                                 "data": json.dumps({
@@ -170,6 +180,37 @@ async def chat_stream(request: ChatRequest):
                             return
                     elif isinstance(last_msg, ToolMessage):
                         accumulated_ai_content = ""
+
+                        # Check if this is a subagent task result
+                        tool_call_id = getattr(last_msg, "tool_call_id", "")
+                        tool_name = getattr(last_msg, "name", "")
+
+                        # Check for subagent task completion
+                        if tool_name == "task" or tool_name == "task_async":
+                            task_id = subagent_tasks_started.get(tool_call_id, "sync-task")
+                            tool_result = str(last_msg.content) if last_msg.content else ""
+
+                            # Check for error/failure
+                            if tool_result.startswith("Task failed:") or tool_result.startswith("Error:"):
+                                yield {
+                                    "event": "subagent_failed",
+                                    "data": json.dumps({
+                                        "type": "subagent_failed",
+                                        "task_id": task_id,
+                                        "error": tool_result
+                                    })
+                                }
+                            else:
+                                yield {
+                                    "event": "subagent_completed",
+                                    "data": json.dumps({
+                                        "type": "subagent_completed",
+                                        "task_id": task_id,
+                                        "result": tool_result
+                                    })
+                                }
+                            await anyio.sleep(0)
+
                         yield {
                             "event": "message",
                             "data": json.dumps({
@@ -223,6 +264,7 @@ async def chat_resume(request: ChatRequest):
     )
     from tools.memory_tools import save_memory, load_memory, clear_memory
 
+    # Build base tools dictionary
     tools_by_name = {
         "run_command": run_command,
         "read_file": read_file,
@@ -236,6 +278,14 @@ async def chat_resume(request: ChatRequest):
         "load_memory": load_memory,
         "clear_memory": clear_memory,
     }
+
+    # Add subagent tools if available
+    try:
+        from subagent import get_all_subagent_tools
+        for tool in get_all_subagent_tools():
+            tools_by_name[tool.name] = tool
+    except ImportError:
+        pass
 
     messages = state.get("messages", [])
     last_msg = messages[-1] if messages else None
@@ -251,6 +301,10 @@ async def chat_resume(request: ChatRequest):
             else:
                 try:
                     tool_func = tools_by_name[tool_name]
+                    # For task_async, inject the tool_call_id as task_id for consistent tracking
+                    if tool_name == "task_async":
+                        tool_args = dict(tool_args)  # Copy to avoid modifying original
+                        tool_args["task_id"] = tool_call["id"]
                     result = tool_func.invoke(tool_args)
                 except Exception as e:
                     result = f"Error: {e}"
@@ -269,6 +323,24 @@ async def chat_resume(request: ChatRequest):
     async def generate():
         # Send tool results first
         for tool_result in tool_results:
+            # Check if this is a task_async result - send subagent_started event
+            if tool_result.name == "task_async":
+                # Extract task_id from the result content
+                # Format: "Task started. Task ID: {task_id}. Use get_task_result..."
+                result_str = str(tool_result.content)
+                if "Task ID:" in result_str:
+                    task_id = result_str.split("Task ID:")[1].split(".")[0].strip()
+                    yield {
+                        "event": "subagent_started",
+                        "data": json.dumps({
+                            "type": "subagent_started",
+                            "task_id": task_id,
+                            "subagent_type": "general-purpose",
+                            "description": "子 agent 任务"
+                        })
+                    }
+                    await anyio.sleep(0)
+
             yield {
                 "event": "message",
                 "data": json.dumps({

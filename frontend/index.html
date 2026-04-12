@@ -170,6 +170,66 @@
         </div>
     </div>
 
+    <!-- 子 agent 任务悬浮窗 -->
+    <div id="subagentTaskFloat" class="subagent-float" style="display: none;">
+        <div class="subagent-float-header">
+            <div class="subagent-float-title">
+                <span class="status-dot running" id="subagentFloatStatusDot"></span>
+                <span id="subagentFloatTitle">子 agent 运行中</span>
+            </div>
+            <div class="subagent-float-actions">
+                <button class="btn-float-action" onclick="toggleSubagentFloatDetail()" title="查看详情">📋</button>
+                <button class="btn-float-close" onclick="closeSubagentFloat()" title="关闭">✕</button>
+            </div>
+        </div>
+        <div class="subagent-float-content" id="subagentFloatContent">
+            <div class="subagent-float-task">
+                <span class="subagent-float-label">任务:</span>
+                <span id="subagentFloatTaskName" class="subagent-float-task-name">-</span>
+            </div>
+            <div class="subagent-float-task">
+                <span class="subagent-float-label">类型:</span>
+                <span id="subagentFloatTaskType" class="subagent-float-badge">general-purpose</span>
+            </div>
+            <div class="subagent-float-progress">
+                <div class="progress-bar-mini">
+                    <div class="progress-fill-mini" id="subagentFloatProgress"></div>
+                </div>
+                <div class="subagent-float-meta">
+                    <span id="subagentFloatTime">0s</span>
+                </div>
+            </div>
+            <!-- 工具执行日志区域 -->
+            <div class="subagent-tool-log" id="subagentToolLog" style="display: none;">
+                <div class="subagent-tool-log-header">
+                    <span>🔧 工具执行</span>
+                    <span class="subagent-tool-count" id="subagentToolCount">0</span>
+                </div>
+                <div class="subagent-tool-log-content" id="subagentToolLogContent">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 子 agent 任务详情 Modal (可选查看) -->
+    <div id="subagentTaskModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>🤖 子 agent 任务详情</h3>
+                <button class="modal-close" onclick="closeSubagentTaskModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="subagentModalContent">
+                    <!-- 动态填充内容 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="subagentCancelBtn" onclick="cancelSubagentTask()">取消任务</button>
+                <button class="btn btn-primary" onclick="closeSubagentTaskModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 知识库详情 Modal -->
     <div id="knowledgeDetailModal" class="modal" style="display: none;">
         <div class="modal-content modal-large">

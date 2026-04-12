@@ -11,6 +11,78 @@ let currentDetailKbId = null; // 当前详情面板的知识库 ID
 let indexingPollInterval = null; // 索引状态轮询定时器
 let currentEditKbId = null; // 当前编辑的知识库 ID
 
+// Subagent task state
+let currentSubagentTaskId = null;
+let subagentTaskPollInterval = null;
+let subagentFloatDragState = null; // 拖动状态：{ isDragging, offsetX, offsetY, element }
+
+// 初始化悬浮窗拖动功能（旧版，保留用于兼容）
+function initSubagentFloatDrag() {
+    const floatEl = document.getElementById('subagentTaskFloat');
+    if (!floatEl) return;
+    const header = floatEl.querySelector('.subagent-float-header');
+
+    header.addEventListener('mousedown', (e) => {
+        subagentFloatDragState = {
+            isDragging: true,
+            offsetX: e.clientX - floatEl.getBoundingClientRect().left,
+            offsetY: e.clientY - floatEl.getBoundingClientRect().top,
+            element: floatEl
+        };
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (subagentFloatDragState && subagentFloatDragState.isDragging) {
+            const el = subagentFloatDragState.element;
+            el.style.left = (e.clientX - subagentFloatDragState.offsetX) + 'px';
+            el.style.top = (e.clientY - subagentFloatDragState.offsetY) + 'px';
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        subagentFloatDragState = null;
+    });
+}
+
+// 为单个悬浮窗元素初始化拖动功能
+function initSubagentFloatDragOnElement(floatEl) {
+    const header = floatEl.querySelector('.subagent-float-header');
+    if (!header) return;
+
+    header.addEventListener('mousedown', (e) => {
+        const dragState = {
+            isDragging: true,
+            offsetX: e.clientX - floatEl.getBoundingClientRect().left,
+            offsetY: e.clientY - floatEl.getBoundingClientRect().top,
+            element: floatEl
+        };
+
+        const mouseMoveHandler = (e) => {
+            if (dragState.isDragging) {
+                const el = dragState.element;
+                el.style.left = (e.clientX - dragState.offsetX) + 'px';
+                el.style.top = (e.clientY - dragState.offsetY) + 'px';
+                el.style.right = 'auto';
+                el.style.bottom = 'auto';
+            }
+        };
+
+        const mouseUpHandler = () => {
+            dragState.isDragging = false;
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            document.removeEventListener('mouseup', mouseUpHandler);
+        };
+
+        document.addEventListener('mousemove', mouseMoveHandler);
+        document.addEventListener('mouseup', mouseUpHandler);
+
+        e.preventDefault();
+    });
+}
+
 // Configure marked
 marked.setOptions({
     breaks: true,
@@ -78,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadKnowledgeBases();
     updateStatus('disconnected');
     initImageUpload();
+    initSubagentFloatDrag(); // 初始化悬浮窗拖动
 });
 
 // Status updates
@@ -336,6 +409,59 @@ async function sendMessage() {
                             }
                             showToolConfirmation(data.tool_calls, messagesContainer);
                             return;
+                        } else if (data.type === 'subagent_started') {
+                            // 子 agent 任务开始 - 仅针对异步任务显示悬浮窗
+                            // 同步任务会在完成后通过 subagent_completed 事件显示
+                            console.log('Subagent task started:', data);
+                            if (data.task_id !== 'sync-task') {
+                                showSubagentFloat(
+                                    data.task_id,
+                                    data.description || '子 agent 任务',
+                                    data.subagent_type || 'general-purpose'
+                                );
+                            }
+                        } else if (data.type === 'subagent_completed') {
+                            // 子 agent 任务完成
+                            console.log('Subagent task completed:', data);
+                            // 对于同步任务，显示悬浮窗并更新为完成状态
+                            if (data.task_id === 'sync-task') {
+                                const floatEl = document.getElementById('subagentTaskFloat');
+                                currentSubagentTaskId = data.task_id;
+                                document.getElementById('subagentFloatTaskName').textContent = '子 agent 任务';
+                                document.getElementById('subagentFloatTaskType').textContent = 'general-purpose';
+                                document.getElementById('subagentFloatTitle').textContent = '子 agent - 已完成';
+                                document.getElementById('subagentFloatStatusDot').className = 'status-dot completed';
+                                document.getElementById('subagentFloatProgress').style.width = '100%';
+                                document.getElementById('subagentFloatContent').innerHTML = `<div class="task-result"><strong>执行结果：</strong><br>${escapeHtml(data.result || '无输出')}</div>`;
+                                floatEl.style.display = 'block';
+                            } else {
+                                // 异步任务 - 使用 taskId 更新对应的悬浮窗
+                                updateSubagentFloatUIForId(data.task_id, {
+                                    status: 'completed',
+                                    result: data.result
+                                });
+                            }
+                        } else if (data.type === 'subagent_failed') {
+                            // 子 agent 任务失败
+                            console.log('Subagent task failed:', data);
+                            // 对于同步任务，显示悬浮窗并更新为失败状态
+                            if (data.task_id === 'sync-task') {
+                                const floatEl = document.getElementById('subagentTaskFloat');
+                                currentSubagentTaskId = data.task_id;
+                                document.getElementById('subagentFloatTaskName').textContent = '子 agent 任务';
+                                document.getElementById('subagentFloatTaskType').textContent = 'general-purpose';
+                                document.getElementById('subagentFloatTitle').textContent = '子 agent - 执行失败';
+                                document.getElementById('subagentFloatStatusDot').className = 'status-dot failed';
+                                document.getElementById('subagentFloatProgress').style.width = '100%';
+                                document.getElementById('subagentFloatContent').innerHTML = `<div class="task-result"><strong>错误信息：</strong><br>${escapeHtml(data.error || '未知错误')}</div>`;
+                                floatEl.style.display = 'block';
+                            } else {
+                                // 异步任务 - 使用 taskId 更新对应的悬浮窗
+                                updateSubagentFloatUIForId(data.task_id, {
+                                    status: 'failed',
+                                    error: data.error
+                                });
+                            }
                         }
                     }
 
@@ -585,6 +711,58 @@ async function resumeAfterConfirmation() {
                             isStreaming = false;
                             messagesContainer.scrollTop = messagesContainer.scrollHeight;
                             return;
+                        } else if (data.type === 'subagent_started') {
+                            // 子 agent 任务开始 - 仅针对异步任务显示悬浮窗
+                            console.log('Subagent task started (resume):', data);
+                            if (data.task_id !== 'sync-task') {
+                                showSubagentFloat(
+                                    data.task_id,
+                                    data.description || '子 agent 任务',
+                                    data.subagent_type || 'general-purpose'
+                                );
+                            }
+                        } else if (data.type === 'subagent_completed') {
+                            // 子 agent 任务完成
+                            console.log('Subagent task completed (resume):', data);
+                            // 对于同步任务，首次显示悬浮窗并更新为完成状态
+                            if (data.task_id === 'sync-task') {
+                                const floatEl = document.getElementById('subagentTaskFloat');
+                                currentSubagentTaskId = data.task_id;
+                                document.getElementById('subagentFloatTaskName').textContent = '子 agent 任务';
+                                document.getElementById('subagentFloatTaskType').textContent = 'general-purpose';
+                                document.getElementById('subagentFloatTitle').textContent = '子 agent - 已完成';
+                                document.getElementById('subagentFloatStatusDot').className = 'status-dot completed';
+                                document.getElementById('subagentFloatProgress').style.width = '100%';
+                                document.getElementById('subagentFloatContent').innerHTML = `<div class="task-result"><strong>执行结果：</strong><br>${escapeHtml(data.result || '无输出')}</div>`;
+                                floatEl.style.display = 'block';
+                            } else {
+                                // 异步任务 - 使用 taskId 更新对应的悬浮窗
+                                updateSubagentFloatUIForId(data.task_id, {
+                                    status: 'completed',
+                                    result: data.result
+                                });
+                            }
+                        } else if (data.type === 'subagent_failed') {
+                            // 子 agent 任务失败
+                            console.log('Subagent task failed (resume):', data);
+                            // 对于同步任务，首次显示悬浮窗并更新为失败状态
+                            if (data.task_id === 'sync-task') {
+                                const floatEl = document.getElementById('subagentTaskFloat');
+                                currentSubagentTaskId = data.task_id;
+                                document.getElementById('subagentFloatTaskName').textContent = '子 agent 任务';
+                                document.getElementById('subagentFloatTaskType').textContent = 'general-purpose';
+                                document.getElementById('subagentFloatTitle').textContent = '子 agent - 执行失败';
+                                document.getElementById('subagentFloatStatusDot').className = 'status-dot failed';
+                                document.getElementById('subagentFloatProgress').style.width = '100%';
+                                document.getElementById('subagentFloatContent').innerHTML = `<div class="task-result"><strong>错误信息：</strong><br>${escapeHtml(data.error || '未知错误')}</div>`;
+                                floatEl.style.display = 'block';
+                            } else {
+                                // 异步任务 - 使用 taskId 更新对应的悬浮窗
+                                updateSubagentFloatUIForId(data.task_id, {
+                                    status: 'failed',
+                                    error: data.error
+                                });
+                            }
                         }
                     }
 
@@ -1174,3 +1352,598 @@ async function deleteKnowledgeBase(kbId) {
         alert('删除失败：' + e.message);
     }
 }
+
+// ==================== Subagent Task Functions ====================
+
+let subagentToolPollInterval = null; // 工具历史轮询定时器
+let activeSubagentFloats = new Map(); // 跟踪所有活跃的悬浮窗 taskId -> {element, timer, pollInterval, toolPollInterval}
+
+// 显示子 agent 悬浮窗（默认小窗，不遮挡确认 UI）
+function showSubagentFloat(taskId, taskDescription, subagentType) {
+    // 检查是否已存在该任务的悬浮窗
+    if (activeSubagentFloats.has(taskId)) {
+        // 已存在，只需更新内容
+        const floatData = activeSubagentFloats.get(taskId);
+        const floatEl = floatData.element;
+
+        floatEl.querySelector('.subagent-float-task-name').textContent = taskDescription || '子 agent 任务';
+        floatEl.querySelector('.subagent-float-badge').textContent = subagentType || 'general-purpose';
+        floatEl.querySelector('#subagentFloatTitle').textContent = '子 agent 运行中';
+        floatEl.querySelector('.status-dot').className = 'status-dot running';
+        floatEl.querySelector('.progress-fill-mini').style.width = '30%';
+        return;
+    }
+
+    // 创建新的悬浮窗元素
+    const floatEl = document.createElement('div');
+    floatEl.className = 'subagent-float subagent-float-multi';
+    floatEl.id = `subagentTaskFloat-${taskId}`;
+    floatEl.style.display = 'block';
+
+    floatEl.innerHTML = `
+        <div class="subagent-float-header">
+            <div class="subagent-float-title">
+                <span class="status-dot running"></span>
+                <span class="subagent-float-main-title">子 agent 运行中</span>
+            </div>
+            <div class="subagent-float-actions">
+                <button class="btn-float-action" onclick="showSubagentModal('${taskId}')" title="查看详情">📋</button>
+                <button class="btn-float-close" onclick="closeSingleSubagentFloat('${taskId}')" title="关闭">✕</button>
+            </div>
+        </div>
+        <div class="subagent-float-content">
+            <div class="subagent-float-task">
+                <span class="subagent-float-label">任务:</span>
+                <span class="subagent-float-task-name">${escapeHtml(taskDescription || '子 agent 任务')}</span>
+            </div>
+            <div class="subagent-float-task">
+                <span class="subagent-float-label">类型:</span>
+                <span class="subagent-float-badge">${escapeHtml(subagentType || 'general-purpose')}</span>
+            </div>
+            <div class="subagent-float-progress">
+                <div class="progress-bar-mini">
+                    <div class="progress-fill-mini" style="width: 30%"></div>
+                </div>
+                <div class="subagent-float-meta">
+                    <span class="subagent-float-time">0s</span>
+                </div>
+            </div>
+            <!-- 工具执行日志区域 -->
+            <div class="subagent-tool-log" style="display: none;">
+                <div class="subagent-tool-log-header">
+                    <span>🔧 工具执行</span>
+                    <span class="subagent-tool-count">0</span>
+                </div>
+                <div class="subagent-tool-log-content"></div>
+            </div>
+        </div>
+    `;
+
+    // 添加到页面
+    document.body.appendChild(floatEl);
+
+    // 设置位置：每个新悬浮窗向左偏移 300px（基础 right 20px + 索引 * 300px）
+    const baseRight = 20;
+    const offset = 300;
+    const floatIndex = activeSubagentFloats.size - 1; // 当前是第几个（0-based）
+    floatEl.style.right = `${baseRight + floatIndex * offset}px`;
+    floatEl.style.top = '20px';
+
+    // 初始化拖动功能
+    initSubagentFloatDragOnElement(floatEl);
+
+    // 记录悬浮窗数据
+    const floatData = {
+        element: floatEl,
+        startTime: null,
+        elapsedTimer: null,
+        pollInterval: null,
+        toolPollInterval: null
+    };
+    activeSubagentFloats.set(taskId, floatData);
+
+    // 对于同步任务，不启动轮询和计时器
+    if (taskId === 'sync-task') {
+        return;
+    }
+
+    // 记录开始时间
+    floatData.startTime = Date.now();
+    floatData.elapsedTimer = setInterval(() => {
+        const elapsed = ((Date.now() - floatData.startTime) / 1000).toFixed(1);
+        floatEl.querySelector('.subagent-float-time').textContent = `${elapsed}s`;
+    }, 1000);
+
+    // 开始轮询任务状态
+    floatData.pollInterval = setInterval(() => pollSubagentTaskStatusForId(taskId), 2000);
+
+    // 开始轮询工具历史
+    floatData.toolPollInterval = setInterval(() => pollSubagentToolHistoryForId(taskId), 1500);
+}
+
+// 关闭子 agent 悬浮窗（关闭所有）
+function closeSubagentFloat() {
+    // 关闭所有活跃的悬浮窗
+    activeSubagentFloats.forEach((floatData, taskId) => {
+        closeSingleSubagentFloat(taskId);
+    });
+}
+
+// 关闭单个子 agent 悬浮窗
+function closeSingleSubagentFloat(taskId) {
+    const floatData = activeSubagentFloats.get(taskId);
+    if (!floatData) return;
+
+    // 清除定时器
+    if (floatData.elapsedTimer) {
+        clearInterval(floatData.elapsedTimer);
+    }
+    if (floatData.pollInterval) {
+        clearInterval(floatData.pollInterval);
+    }
+    if (floatData.toolPollInterval) {
+        clearInterval(floatData.toolPollInterval);
+    }
+
+    // 从 DOM 移除
+    if (floatData.element && floatData.element.parentNode) {
+        floatData.element.parentNode.removeChild(floatData.element);
+    }
+
+    // 从 Map 移除
+    activeSubagentFloats.delete(taskId);
+
+    // 重新计算剩余悬浮窗的位置
+    recalculateFloatPositions();
+}
+
+// 重新计算所有悬浮窗的位置
+function recalculateFloatPositions() {
+    const baseRight = 20;
+    const offset = 300;
+    let index = 0;
+    activeSubagentFloats.forEach((floatData) => {
+        if (floatData.element) {
+            floatData.element.style.right = `${baseRight + index * offset}px`;
+            floatData.element.style.top = '20px';
+            index++;
+        }
+    });
+}
+
+// 打开悬浮窗详情模态框（通过按钮点击）
+function showSubagentModal(taskId) {
+    const floatData = activeSubagentFloats.get(taskId);
+    if (!floatData) return;
+
+    const floatEl = floatData.element;
+    const modal = document.getElementById('subagentTaskModal');
+    const modalContent = document.getElementById('subagentModalContent');
+
+    // 填充详情内容
+    const taskName = floatEl.querySelector('.subagent-float-task-name').textContent;
+    const taskType = floatEl.querySelector('.subagent-float-badge').textContent;
+    const statusText = floatEl.querySelector('.subagent-float-main-title').textContent;
+    const elapsedTime = floatEl.querySelector('.subagent-float-time').textContent;
+
+    modalContent.innerHTML = `
+        <div class="subagent-detail-row">
+            <strong>任务:</strong> ${escapeHtml(taskName)}
+        </div>
+        <div class="subagent-detail-row">
+            <strong>类型:</strong> ${escapeHtml(taskType)}
+        </div>
+        <div class="subagent-detail-row">
+            <strong>状态:</strong> ${statusText}
+        </div>
+        <div class="subagent-detail-row">
+            <strong>用时:</strong> ${escapeHtml(elapsedTime)}
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+}
+
+// 切换悬浮窗详情（打开 modal 查看详情）
+function toggleSubagentFloatDetail() {
+    const modal = document.getElementById('subagentTaskModal');
+    const modalContent = document.getElementById('subagentModalContent');
+
+    // 填充详情内容
+    const taskName = document.getElementById('subagentFloatTaskName').textContent;
+    const taskType = document.getElementById('subagentFloatTaskType').textContent;
+    const statusText = document.getElementById('subagentFloatTitle').textContent;
+
+    modalContent.innerHTML = `
+        <div class="subagent-detail-row">
+            <strong>任务:</strong> ${escapeHtml(taskName)}
+        </div>
+        <div class="subagent-detail-row">
+            <strong>类型:</strong> ${escapeHtml(taskType)}
+        </div>
+        <div class="subagent-detail-row">
+            <strong>状态:</strong> ${statusText}
+        </div>
+        <div class="subagent-detail-row">
+            <strong>用时:</strong> <span id="modalElapsedTime">${document.getElementById('subagentFloatTime').textContent}</span>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+}
+
+// 关闭子 agent 详情模态框
+function closeSubagentTaskModal() {
+    const modal = document.getElementById('subagentTaskModal');
+    modal.style.display = 'none';
+}
+
+// 轮询子 agent 工具历史（针对特定 taskId）
+async function pollSubagentToolHistoryForId(taskId) {
+    if (!taskId || taskId === 'sync-task') return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/subagent/task/${taskId}/tools`);
+
+        if (res.status === 404) {
+            return;
+        }
+
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        renderSubagentToolLogForId(taskId, data.tools || []);
+    } catch (e) {
+        console.error('Poll subagent tool history error:', e);
+    }
+}
+
+// 轮询子 agent 工具历史
+async function pollSubagentToolHistory() {
+    if (!currentSubagentTaskId) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/subagent/task/${currentSubagentTaskId}/tools`);
+
+        if (res.status === 404) {
+            return;
+        }
+
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        renderSubagentToolLog(data.tools || []);
+    } catch (e) {
+        console.error('Poll subagent tool history error:', e);
+    }
+}
+
+// 渲染工具执行日志（针对特定 taskId）
+function renderSubagentToolLogForId(taskId, tools) {
+    const floatData = activeSubagentFloats.get(taskId);
+    if (!floatData) return;
+
+    const floatEl = floatData.element;
+    const logEl = floatEl.querySelector('.subagent-tool-log');
+    const contentEl = floatEl.querySelector('.subagent-tool-log-content');
+    const countEl = floatEl.querySelector('.subagent-tool-count');
+
+    if (tools.length === 0) {
+        logEl.style.display = 'none';
+        return;
+    }
+
+    logEl.style.display = 'block';
+    countEl.textContent = tools.length;
+
+    const statusIcon = {
+        'pending': '⏳',
+        'running': '🔄',
+        'completed': '✅',
+        'failed': '❌'
+    };
+
+    const statusClass = {
+        'pending': 'pending',
+        'running': 'running',
+        'completed': 'completed',
+        'failed': 'failed'
+    };
+
+    let html = '';
+    tools.forEach(tool => {
+        const icon = statusIcon[tool.status] || '❓';
+        const cls = statusClass[tool.status] || '';
+        const argsPreview = tool.args?.description || tool.args?.command || tool.args?.path || '';
+        const argsText = argsPreview ? ` - ${escapeHtml(argsPreview)}` : '';
+
+        html += `
+            <div class="subagent-tool-item ${cls}">
+                <span class="subagent-tool-icon">${icon}</span>
+                <span class="subagent-tool-name">${escapeHtml(tool.tool_name)}${argsText}</span>
+                <span class="subagent-tool-status">${tool.status}</span>
+            </div>
+        `;
+    });
+
+    contentEl.innerHTML = html;
+}
+
+// 渲染工具执行日志
+function renderSubagentToolLog(tools) {
+    const logEl = document.getElementById('subagentToolLog');
+    const contentEl = document.getElementById('subagentToolLogContent');
+    const countEl = document.getElementById('subagentToolCount');
+
+    if (tools.length === 0) {
+        logEl.style.display = 'none';
+        return;
+    }
+
+    logEl.style.display = 'block';
+    countEl.textContent = tools.length;
+
+    const statusIcon = {
+        'pending': '⏳',
+        'running': '🔄',
+        'completed': '✅',
+        'failed': '❌'
+    };
+
+    const statusClass = {
+        'pending': 'pending',
+        'running': 'running',
+        'completed': 'completed',
+        'failed': 'failed'
+    };
+
+    let html = '';
+    tools.forEach(tool => {
+        const icon = statusIcon[tool.status] || '❓';
+        const cls = statusClass[tool.status] || '';
+        const argsPreview = tool.args?.description || tool.args?.command || tool.args?.path || '';
+        const argsText = argsPreview ? ` - ${escapeHtml(argsPreview)}` : '';
+
+        html += `
+            <div class="subagent-tool-item ${cls}">
+                <span class="subagent-tool-icon">${icon}</span>
+                <span class="subagent-tool-name">${escapeHtml(tool.tool_name)}${argsText}</span>
+                <span class="subagent-tool-status">${tool.status}</span>
+            </div>
+        `;
+    });
+
+    contentEl.innerHTML = html;
+}
+
+// 轮询子 agent 任务状态（针对特定 taskId）
+async function pollSubagentTaskStatusForId(taskId) {
+    if (!taskId || taskId === 'sync-task') return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/subagent/task/${taskId}/status`);
+
+        // 如果接口不存在 (404)，说明后端没有这个 API，停止轮询
+        if (res.status === 404) {
+            console.log('Subagent task status API not available or task not found');
+            // 不立即停止轮询，因为任务可能正在执行中，只是后端还没有保存
+            // 等待后端返回实际状态
+            return;
+        }
+
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        updateSubagentFloatUIForId(taskId, data);
+
+        // 如果是终端状态，停止轮询并清理
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled' || data.status === 'timed_out') {
+            const floatData = activeSubagentFloats.get(taskId);
+            if (floatData && floatData.pollInterval) {
+                clearInterval(floatData.pollInterval);
+                floatData.pollInterval = null;
+            }
+            if (floatData && floatData.elapsedTimer) {
+                clearInterval(floatData.elapsedTimer);
+                floatData.elapsedTimer = null;
+            }
+            if (floatData && floatData.toolPollInterval) {
+                clearInterval(floatData.toolPollInterval);
+                floatData.toolPollInterval = null;
+            }
+        }
+    } catch (e) {
+        console.error('Poll subagent status error:', e);
+    }
+}
+
+// 轮询子 agent 任务状态
+async function pollSubagentTaskStatus() {
+    if (!currentSubagentTaskId) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/subagent/task/${currentSubagentTaskId}/status`);
+
+        // 如果接口不存在 (404)，说明后端没有这个 API，停止轮询
+        if (res.status === 404) {
+            console.log('Subagent task status API not available or task not found');
+            // 不立即停止轮询，因为任务可能正在执行中，只是后端还没有保存
+            // 等待后端返回实际状态
+            return;
+        }
+
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        updateSubagentFloatUI(data);
+
+        // 如果是终端状态，停止轮询
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled' || data.status === 'timed_out') {
+            if (subagentTaskPollInterval) {
+                clearInterval(subagentTaskPollInterval);
+                subagentTaskPollInterval = null;
+            }
+            if (window.subagentTaskElapsedTimer) {
+                clearInterval(window.subagentTaskElapsedTimer);
+                window.subagentTaskElapsedTimer = null;
+            }
+            if (subagentToolPollInterval) {
+                clearInterval(subagentToolPollInterval);
+                subagentToolPollInterval = null;
+            }
+        }
+    } catch (e) {
+        console.error('Poll subagent status error:', e);
+    }
+}
+
+// 更新子 agent 悬浮窗 UI（针对特定 taskId）
+function updateSubagentFloatUIForId(taskId, data) {
+    const floatData = activeSubagentFloats.get(taskId);
+    if (!floatData) return;
+
+    const floatEl = floatData.element;
+    const statusDot = floatEl.querySelector('.status-dot');
+    const floatTitle = floatEl.querySelector('.subagent-float-main-title');
+    const progressFill = floatEl.querySelector('.progress-fill-mini');
+    const timeEl = floatEl.querySelector('.subagent-float-time');
+
+    // 状态映射
+    const statusMap = {
+        'pending': { text: '等待中', class: 'pending' },
+        'running': { text: '运行中', class: 'running' },
+        'completed': { text: '已完成', class: 'completed' },
+        'failed': { text: '失败', class: 'failed' },
+        'cancelled': { text: '已取消', class: 'cancelled' },
+        'timed_out': { text: '已超时', class: 'failed' }
+    };
+
+    const status = statusMap[data.status] || { text: data.status, class: 'pending' };
+    statusDot.className = `status-dot ${status.class}`;
+    floatTitle.textContent = `子 agent - ${status.text}`;
+
+    // 更新进度条
+    if (data.status === 'running') {
+        progressFill.style.width = '60%';
+        progressFill.classList.remove('complete');
+    } else if (data.status === 'completed') {
+        progressFill.style.width = '100%';
+        progressFill.classList.add('complete');
+    } else if (data.status === 'failed' || data.status === 'cancelled') {
+        progressFill.style.width = '0%';
+        progressFill.classList.remove('complete');
+    }
+
+    // 更新用时
+    if (data.elapsed_time !== undefined) {
+        timeEl.textContent = `${data.elapsed_time.toFixed(1)}s`;
+    }
+
+    // 如果是完成或失败状态，显示结果内容
+    if (data.status === 'completed' || data.status === 'failed') {
+        const contentEl = floatEl.querySelector('.subagent-float-content');
+        const resultOrError = data.result || data.error || '无输出';
+        const resultLabel = data.status === 'completed' ? '执行结果' : '错误信息';
+
+        // 添加结果摘要
+        let resultDiv = contentEl.querySelector('.task-result');
+        if (!resultDiv) {
+            resultDiv = document.createElement('div');
+            resultDiv.className = 'task-result';
+            contentEl.appendChild(resultDiv);
+        }
+        resultDiv.innerHTML = `<strong>${resultLabel}：</strong><br>${escapeHtml(resultOrError.substring(0, 200))}${resultOrError.length > 200 ? '...' : ''}`;
+    }
+}
+
+// 更新子 agent 悬浮窗 UI
+function updateSubagentFloatUI(data) {
+    const statusDot = document.getElementById('subagentFloatStatusDot');
+    const floatTitle = document.getElementById('subagentFloatTitle');
+    const progressFill = document.getElementById('subagentFloatProgress');
+    const cancelBtn = document.getElementById('subagentCancelBtn');
+
+    // 状态映射
+    const statusMap = {
+        'pending': { text: '等待中', class: 'pending' },
+        'running': { text: '运行中', class: 'running' },
+        'completed': { text: '已完成', class: 'completed' },
+        'failed': { text: '失败', class: 'failed' },
+        'cancelled': { text: '已取消', class: 'cancelled' },
+        'timed_out': { text: '已超时', class: 'failed' }
+    };
+
+    const status = statusMap[data.status] || { text: data.status, class: 'pending' };
+    statusDot.className = `status-dot ${status.class}`;
+    floatTitle.textContent = `子 agent - ${status.text}`;
+
+    // 更新进度条
+    if (data.status === 'running') {
+        progressFill.style.width = '60%';
+        progressFill.classList.remove('complete');
+    } else if (data.status === 'completed') {
+        progressFill.style.width = '100%';
+        progressFill.classList.add('complete');
+    } else if (data.status === 'failed' || data.status === 'cancelled') {
+        progressFill.style.width = '0%';
+        progressFill.classList.remove('complete');
+    }
+
+    // 更新用时
+    if (data.elapsed_time !== undefined) {
+        document.getElementById('subagentFloatTime').textContent = `${data.elapsed_time.toFixed(1)}s`;
+    }
+
+    // 更新详情模态框内容（如果打开）
+    const modalContent = document.getElementById('subagentModalContent');
+    if (modalContent && data.result) {
+        const resultHtml = data.result ? `<pre>${escapeHtml(data.result)}</pre>` : '';
+        const errorHtml = data.error ? `<pre style="color: var(--error);">${escapeHtml(data.error)}</pre>` : '';
+        modalContent.innerHTML = `
+            <div class="subagent-detail-row"><strong>任务:</strong> ${escapeHtml(document.getElementById('subagentFloatTaskName').textContent)}</div>
+            <div class="subagent-detail-row"><strong>类型:</strong> ${escapeHtml(document.getElementById('subagentFloatTaskType').textContent)}</div>
+            <div class="subagent-detail-row"><strong>状态:</strong> ${status.text}</div>
+            <div class="subagent-detail-row"><strong>用时:</strong> ${data.elapsed_time ? data.elapsed_time.toFixed(1) + 's' : '-'}</div>
+            ${resultHtml || errorHtml ? '<h4>结果</h4>' : ''}
+            ${resultHtml}
+            ${errorHtml}
+        `;
+    }
+}
+
+// 取消子 agent 任务
+async function cancelSubagentTask() {
+    if (!currentSubagentTaskId) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/subagent/task/${currentSubagentTaskId}/cancel`, {
+            method: 'POST'
+        });
+
+        if (res.ok) {
+            document.getElementById('subagentFloatStatusDot').className = 'status-dot cancelled';
+            document.getElementById('subagentFloatTitle').textContent = '子 agent - 已取消';
+            if (subagentTaskPollInterval) {
+                clearInterval(subagentTaskPollInterval);
+                subagentTaskPollInterval = null;
+            }
+        }
+    } catch (e) {
+        console.error('Cancel task error:', e);
+    }
+}
+
+// 检测消息中是否包含子 agent 任务启动
+function checkForSubagentTask(messageContent) {
+    const taskPattern = /task\(|Delegating to subagent|subagent|任务委托/i;
+    return taskPattern.test(messageContent);
+}
+

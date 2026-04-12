@@ -8,7 +8,7 @@
 ![alt text](image-4.png)
 ![alt text](image-5.png)
 ![alt text](image-6.png)
-
+![alt text](image-7.png)
 ## 项目结构
 
 ```
@@ -114,6 +114,7 @@ python -m http.server 3000
 - ✅ 个人知识库、RAG检索、重排序
 - ✅ 多格式文档支持 - 支持 PDF、Word、Excel、PPT、Markdown 等常见格式自动解析
 - ✅ 长期记忆 - 记录用户信息、偏好，以及用户想要agent记住的
+- ✅ **子Agent / 后台子Agent 任务动态创建 支持多线程并行运行**
 
 ## 防护机制：
 

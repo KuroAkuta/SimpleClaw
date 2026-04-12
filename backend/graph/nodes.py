@@ -127,6 +127,7 @@ async def tool_node(state: AgentState) -> Dict:
     )
     from tools.memory_tools import save_memory, load_memory, clear_memory
 
+    # Build base tools dictionary
     tools_by_name = {
         "run_command": run_command,
         "read_file": read_file,
@@ -139,6 +140,14 @@ async def tool_node(state: AgentState) -> Dict:
         "load_memory": load_memory,
         "clear_memory": clear_memory,
     }
+
+    # Add subagent tools if available
+    try:
+        from subagent import get_all_subagent_tools
+        for tool in get_all_subagent_tools():
+            tools_by_name[tool.name] = tool
+    except ImportError:
+        pass
 
     last_message = state["messages"][-1]
 

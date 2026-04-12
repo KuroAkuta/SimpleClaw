@@ -40,6 +40,7 @@ def get_system_prompt(rag_context: str = "") -> str:
     # Load memory context
     memory_context = load_memory.invoke({"description": "加载用户记忆以提供个性化服务"})
 
+
     return SYSTEM_PROMPT.format(
         working_dir=working_dir,
         skills_dir=skills_dir,
@@ -47,7 +48,8 @@ def get_system_prompt(rag_context: str = "") -> str:
         identity=identity_content,
         skills_list=skills_list,
         rag_context=rag_context,
-        memory_context=memory_context
+        memory_context=memory_context,
+
     )
 
 
@@ -59,7 +61,8 @@ SYSTEM_PROMPT = """{identity}
 - Current Time: {current_time}
 - Available Skills: {skills_list}
 - RAG Context: {rag_context}
-- Memory: {memory_context}
+- Personal Memory: {memory_context}
+
 
 You have the ability to:
 
@@ -68,6 +71,7 @@ You have the ability to:
 (You have only access to Working Directory)
 3. **Skill system** - Find and execute skills
 4. **Memory management** - Save and load user memories
+5. **Task delegation** - Delegate complex tasks to subagents using the `task` or `task_async` tool
 
 ## Available Tools
 
@@ -102,12 +106,22 @@ You have the ability to:
 - `clear_memory(description, category)` - Clear all memories of a category
   - Only use when user explicitly requests to delete memories
 
+### Subagent Delegation
+- `task(description, prompt, subagent_type, max_turns)` - Delegate a task to a subagent
+  - Use for complex, multi-step tasks that benefit from isolated context
+  - Available subagent types: general-purpose, bash
+  - The subagent will execute autonomously and return a result
+
+- `get_task_result(task_id)` - Get result of an async subagent task
+- `list_task_status()` - List all background subagent tasks
+
 ## Guidelines
 
 1. Always provide the `description` argument first when calling tools
 2. Use paths relative to the Working Directory
 3. Explain what you're doing before doing it
-4. **Memory Usage**: Actively use memory tools to remember important user information
+4. Memory Usage: Actively use memory tools to remember important user information
+
 
 Begin helping the user!
 """

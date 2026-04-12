@@ -1222,3 +1222,295 @@ body {
     background: rgba(239, 68, 68, 0.15);
     color: var(--error);
 }
+
+/* ==================== Subagent Task Float Styles ==================== */
+.subagent-float {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 280px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 500;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+/* 多悬浮窗模式 - 通过 JS 设置 right 位置 */
+.subagent-float-multi {
+    position: fixed;
+    top: 20px;
+    width: 280px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 500;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.subagent-float:hover {
+    border-color: var(--accent-gold);
+    box-shadow: 0 12px 40px rgba(212, 168, 83, 0.15);
+}
+
+.subagent-float-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    cursor: move;
+}
+
+.subagent-float-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.subagent-float-title .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.subagent-float-title .status-dot.running {
+    background: var(--accent-gold);
+    animation: pulse 1s infinite;
+}
+
+.subagent-float-title .status-dot.completed {
+    background: var(--success);
+}
+
+.subagent-float-title .status-dot.failed {
+    background: var(--error);
+}
+
+.subagent-float-title .status-dot.cancelled {
+    background: var(--text-muted);
+}
+
+.subagent-float-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.btn-float-action,
+.btn-float-close {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.btn-float-action:hover,
+.btn-float-close:hover {
+    background: var(--bg-primary);
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+}
+
+.btn-float-close:hover {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.subagent-float-content {
+    padding: 0.75rem 1rem;
+}
+
+.subagent-float-task {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.subagent-float-task:last-child {
+    margin-bottom: 0;
+}
+
+.subagent-float-label {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.subagent-float-task-name {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.subagent-float-badge {
+    background: var(--bg-tertiary);
+    color: var(--accent-gold);
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.progress-bar-mini {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 0.25rem;
+}
+
+.progress-fill-mini {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-gold), var(--accent-gold-light));
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 2px;
+}
+
+.progress-fill-mini.complete {
+    width: 100%;
+}
+
+.subagent-float-meta {
+    display: flex;
+    justify-content: flex-end;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* 子 agent 工具执行日志区域 */
+.subagent-tool-log {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--bg-tertiary);
+    padding-top: 0.75rem;
+}
+
+.subagent-tool-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.subagent-tool-count {
+    background: var(--bg-tertiary);
+    color: var(--accent-gold);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+}
+
+.subagent-tool-log-content {
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 0.7rem;
+}
+
+.subagent-tool-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    margin-bottom: 0.25rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    border-left: 2px solid var(--text-muted);
+}
+
+.subagent-tool-item.pending {
+    border-left-color: var(--accent-gold);
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.subagent-tool-item.running {
+    border-left-color: var(--accent-blue);
+    background: rgba(33, 150, 243, 0.1);
+}
+
+.subagent-tool-item.completed {
+    border-left-color: var(--success);
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.subagent-tool-item.failed {
+    border-left-color: var(--error);
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.subagent-tool-icon {
+    font-size: 0.8rem;
+}
+
+.subagent-tool-name {
+    color: var(--text-secondary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.subagent-tool-status {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+/* Subagent Modal (detail view) */
+#subagentTaskModal .modal-body h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 1rem 0 0.5rem 0;
+}
+
+#subagentTaskModal .modal-body pre {
+    background: var(--bg-primary);
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.subagent-detail-row {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.subagent-detail-row:last-child {
+    border-bottom: none;
+}
+
+.subagent-detail-row strong {
+    color: var(--text-primary);
+    margin-right: 0.5rem;
+}
+
+/* 可拖动悬浮窗支持 */
+.subagent-float.ui-draggable {
+    cursor: move;
+}

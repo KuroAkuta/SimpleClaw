@@ -83,15 +83,45 @@ def run_command(description: str, command: str) -> str:
             return f"Error: Command blocked for security reasons - contains restricted pattern: '{pattern}'"
 
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8", # 强制使用 utf-8 解码输出
-            timeout=300,
-            cwd=str(get_workspace_dir())
-        )
+        # Prepare environment for Windows compatibility
+        import subprocess
+        creationflags = 0
+
+        # On Windows, prevent console window popup
+        if platform.system() == "Windows":
+            try:
+                creationflags = subprocess.CREATE_NO_WINDOW
+            except AttributeError:
+                pass  # Older Python versions may not have this
+
+        # First try with utf-8 encoding
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",  # Replace undecodable characters
+                timeout=300,
+                cwd=str(get_workspace_dir()),
+                creationflags=creationflags,
+            )
+        except UnicodeDecodeError:
+            # If utf-8 fails, try with system default encoding
+            import locale
+            system_encoding = locale.getpreferredencoding() or 'cp1252'
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                encoding=system_encoding,
+                errors="replace",
+                timeout=300,
+                cwd=str(get_workspace_dir()),
+                creationflags=creationflags,
+            )
         output = result.stdout
         if result.stderr:
             output += "\nStderr:\n" + result.stderr
@@ -365,7 +395,7 @@ def execute_skill_script(description: str, skill_name: str, script_name: str, sc
 
 def get_all_tools():
     """Get all available tools."""
-    return [
+    tools = [
         # Bash
         run_command,
         # File operations
@@ -374,6 +404,16 @@ def get_all_tools():
         list_directory,
         find_files,
         # Skill system
+        list_skills,
         get_skill,
         execute_skill_script,
     ]
+
+    # Add subagent tools if available
+    try:
+        from subagent import get_all_subagent_tools
+        tools.extend(get_all_subagent_tools())
+    except ImportError:
+        pass  # Subagent module not available
+
+    return tools

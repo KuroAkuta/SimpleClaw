@@ -44,7 +44,8 @@ class Settings:
     # Paths
     BACKEND_DIR = Path(__file__).parent.parent
     PROJECT_DIR = BACKEND_DIR.parent
-    SKILLS_DIR = PROJECT_DIR / "skills"
+    # Skills directory is in backend/.agents/skills/ (not project root)
+    SKILLS_DIR = BACKEND_DIR / ".agents" / "skills"
 
     # Server
     HOST = os.getenv("HOST", "0.0.0.0")
