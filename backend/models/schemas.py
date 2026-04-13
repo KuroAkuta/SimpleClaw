@@ -30,6 +30,7 @@ class SessionInfo(BaseModel):
     """Session information for list response."""
     id: str
     created: str
+    name: str = "新会话"
 
 
 class SessionsResponse(BaseModel):

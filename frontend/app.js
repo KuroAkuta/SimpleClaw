@@ -151,6 +151,12 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStatus('disconnected');
     initImageUpload();
     initSubagentFloatDrag(); // 初始化悬浮窗拖动
+
+    // 初始化 textarea 自动调整高度
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput) {
+        autoResizeTextarea(messageInput);
+    }
 });
 
 // Status updates
@@ -171,6 +177,45 @@ function updateStatus(state, text) {
 }
 
 // Session management
+
+// 检查是否是 session 的第一条消息（用于更新会话名称）
+let sessionFirstMessageChecked = {}; // 记录哪些 session 已经检查过
+
+async function checkSessionFirstMessage(sessionId) {
+    if (sessionFirstMessageChecked[sessionId]) {
+        return { isFirstMessage: false };
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`);
+        const data = await res.json();
+        const messages = data.messages || [];
+
+        // 如果没有消息或只有系统消息，说明这是第一条用户消息
+        const isFirstMessage = messages.length === 0;
+        sessionFirstMessageChecked[sessionId] = true;
+        return { isFirstMessage };
+    } catch (e) {
+        console.error('Failed to check session messages:', e);
+        return { isFirstMessage: true }; // 默认当作第一条消息处理
+    }
+}
+
+// 更新会话名称
+async function updateSessionName(sessionId, name) {
+    try {
+        await fetch(`${API_BASE}/api/sessions/${sessionId}/name`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        // 更新成功后刷新会话列表
+        loadSessions();
+    } catch (e) {
+        console.error('Failed to update session name:', e);
+    }
+}
+
 async function loadSessions() {
     try {
         const res = await fetch(`${API_BASE}/api/sessions`);
@@ -186,7 +231,7 @@ function renderSessionList(sessions) {
     container.innerHTML = sessions.map(s => `
         <div class="session-item ${s.id === currentSessionId ? 'active' : ''}"
              onclick="selectSession('${s.id}')">
-            ${s.id.slice(0, 8)}...
+            ${s.name || '新会话'}
         </div>
     `).join('');
 }
@@ -196,6 +241,8 @@ async function newSession() {
         const res = await fetch(`${API_BASE}/api/sessions`, { method: 'POST' });
         const data = await res.json();
         currentSessionId = data.session_id;
+        // 清除第一条消息检查记录，因为新会话默认就是"新会话"名称
+        delete sessionFirstMessageChecked[currentSessionId];
         document.getElementById('messages').innerHTML = `
             <div class="empty-state">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -215,6 +262,9 @@ async function newSession() {
 async function selectSession(sessionId) {
     currentSessionId = sessionId;
     document.getElementById('sessionInfo').textContent = `会话：${sessionId.slice(0, 8)}...`;
+
+    // 切换会话时清除第一条消息检查记录
+    delete sessionFirstMessageChecked[currentSessionId];
 
     // Load messages
     try {
@@ -294,6 +344,14 @@ async function sendMessage() {
         await newSession();
     }
 
+    // 检查是否是 session 的第一条消息，如果是则更新 session 名称
+    const sessionState = await checkSessionFirstMessage(currentSessionId);
+    if (sessionState.isFirstMessage && message) {
+        // 取前 8 个字 + "..." 作为会话名称
+        const sessionName = message.length > 8 ? message.substring(0, 8) + '...' : message;
+        await updateSessionName(currentSessionId, sessionName);
+    }
+
     // 获取启用的知识库列表
     const knowledgeBasesToSend = [...enabledKnowledgeBases];
     console.log('Sending with knowledge bases:', knowledgeBasesToSend);
@@ -328,6 +386,7 @@ async function sendMessage() {
 
     const messageToSend = message || '(Image attached)';
     input.value = '';
+    autoResizeTextarea(input); // 重置高度
 
     // Clear images from preview area immediately after sending
     clearImages();
@@ -799,6 +858,24 @@ function handleKeyPress(event) {
     }
 }
 
+// 自动调整 textarea 高度
+function autoResizeTextarea(textarea) {
+    textarea.style.height = 'auto';
+    const newHeight = textarea.scrollHeight;
+
+    // 限制在最小和最大高度之间
+    const minHeight = 44;
+    const maxHeight = 150;
+
+    if (newHeight >= minHeight && newHeight <= maxHeight) {
+        textarea.style.height = newHeight + 'px';
+    } else if (newHeight > maxHeight) {
+        textarea.style.height = maxHeight + 'px';
+    } else {
+        textarea.style.height = minHeight + 'px';
+    }
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -862,9 +939,27 @@ function renderKnowledgeList() {
 // 渲染知识库选择器（聊天时用）
 function renderKnowledgeSelector() {
     const container = document.getElementById('knowledgeCheckboxes');
+    const selectorWrapper = document.getElementById('knowledgeSelector');
+    const enabledCountEl = document.getElementById('enabledKnowledgeCount');
+    const totalKnowledgeCountEl = document.getElementById('totalKnowledgeCount');
+
+    // 更新计数
+    if (enabledCountEl) enabledCountEl.textContent = enabledKnowledgeBases.length;
+    if (totalKnowledgeCountEl) totalKnowledgeCountEl.textContent = allKnowledgeBases.length;
+
     if (allKnowledgeBases.length === 0) {
         container.innerHTML = '<span class="text-muted">暂无知识库</span>';
+        // 没有知识库时禁用点击
+        if (selectorWrapper) {
+            selectorWrapper.style.cursor = 'default';
+            selectorWrapper.style.opacity = '0.5';
+        }
         return;
+    }
+
+    if (selectorWrapper) {
+        selectorWrapper.style.cursor = 'pointer';
+        selectorWrapper.style.opacity = '1';
     }
 
     container.innerHTML = allKnowledgeBases.map(kb => {
@@ -878,6 +973,20 @@ function renderKnowledgeSelector() {
     }).join('');
 }
 
+// 切换知识库选择器展开/收起状态
+function toggleKnowledgeSelector(event) {
+    // 如果点击的是 checkbox 或其标签，不触发折叠
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'LABEL' ||
+        event.target.closest('.knowledge-checkbox')) {
+        return;
+    }
+
+    const selector = document.getElementById('knowledgeSelector');
+    if (selector && allKnowledgeBases.length > 0) {
+        selector.classList.toggle('expanded');
+    }
+}
+
 // 切换知识库启用状态
 function toggleKnowledgeBase(kbId, checked) {
     if (checked) {
@@ -888,6 +997,8 @@ function toggleKnowledgeBase(kbId, checked) {
         enabledKnowledgeBases = enabledKnowledgeBases.filter(id => id !== kbId);
     }
     renderKnowledgeSelector();
+    // 同步更新侧边栏中的选中状态
+    renderKnowledgeList();
 }
 
 // 显示创建知识库 Modal

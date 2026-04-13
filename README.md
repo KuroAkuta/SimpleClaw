@@ -1,6 +1,7 @@
-# Simple Agent Web
+# SimpleClaw
 
-前后端分离的 Web 版本 Simple Agent，支持流式传输。
+基于Langgraph的简易个人助手。100% Vibe Coding。
+
 command执行：
 ![alt text](image.png)
 工具确认：

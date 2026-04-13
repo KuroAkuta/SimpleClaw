@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from pydantic import BaseModel
 
 # Add backend directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,6 +23,11 @@ from services.session_manager import session_manager
 sessions_router = APIRouter(prefix="/api")
 
 
+class UpdateNameRequest(BaseModel):
+    """Request model for updating session name."""
+    name: str
+
+
 @sessions_router.get("/sessions", response_model=SessionsResponse)
 async def list_sessions():
     """List all sessions."""
@@ -30,10 +36,21 @@ async def list_sessions():
 
 
 @sessions_router.post("/sessions", response_model=CreateSessionResponse)
-async def create_session():
+async def create_session(name: str = "新会话"):
     """Create a new session."""
-    session_id = session_manager.create_session()
+    session_id = session_manager.create_session(name=name)
     return CreateSessionResponse(session_id=session_id)
+
+
+@sessions_router.put("/sessions/{session_id}/name")
+async def update_session_name(session_id: str, request: UpdateNameRequest):
+    """Update session name."""
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session_manager.update_session_name(session_id, request.name)
+    return {"success": True, "name": request.name}
 
 
 @sessions_router.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)

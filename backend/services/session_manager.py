@@ -11,15 +11,19 @@ class SessionManager:
 
     Each session contains:
     - created: Session creation timestamp/ID
+    - name: Session name (default: "新会话")
     - state: AgentState dictionary with messages and metadata
     """
 
     def __init__(self):
         self._sessions: Dict[str, Dict[str, Any]] = {}
 
-    def create_session(self) -> str:
+    def create_session(self, name: str = "新会话") -> str:
         """
         Create a new session.
+
+        Args:
+            name: Optional session name, defaults to "新会话"
 
         Returns:
             New session ID
@@ -27,6 +31,7 @@ class SessionManager:
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = {
             "created": str(uuid.uuid4()),
+            "name": name,
             "state": self._create_empty_state()
         }
         return session_id
@@ -63,12 +68,23 @@ class SessionManager:
         List all sessions.
 
         Returns:
-            List of session info dictionaries with id and created fields
+            List of session info dictionaries with id, created, and name fields
         """
         return [
-            {"id": sid, "created": s.get("created")}
+            {"id": sid, "created": s.get("created"), "name": s.get("name", "新会话")}
             for sid, s in self._sessions.items()
         ]
+
+    def update_session_name(self, session_id: str, name: str) -> None:
+        """
+        Update session name.
+
+        Args:
+            session_id: Session identifier
+            name: New session name
+        """
+        if session_id in self._sessions:
+            self._sessions[session_id]["name"] = name
 
     def update_session_state(
         self,
@@ -109,6 +125,8 @@ class SessionManager:
         if not session_id or session_id not in self._sessions:
             session_id = str(uuid.uuid4())
             self._sessions[session_id] = {
+                "created": str(uuid.uuid4()),
+                "name": "新会话",
                 "state": self._create_empty_state()
             }
         return session_id, self._sessions[session_id]
