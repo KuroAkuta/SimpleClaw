@@ -1,13 +1,21 @@
 # Simple Agent Web
 
 前后端分离的 Web 版本 Simple Agent，支持流式传输。
+command执行：
 ![alt text](image.png)
+工具确认：
 ![alt text](image-1.png)
+skill读取：
 ![alt text](image-2.png)
+图片支持：
 ![alt text](image-3.png)
+知识库：
 ![alt text](image-4.png)
+长期记忆存储：
 ![alt text](image-5.png)
+长期记忆读取：
 ![alt text](image-6.png)
+后台异步多agent：
 ![alt text](image-7.png)
 ## 项目结构
 
