@@ -1,18 +1,16 @@
 """Built-in subagent configurations."""
 
-from pathlib import Path
 from subagent.config import SubagentConfig
+from config.settings import settings
 
 __all__ = [
     "GENERAL_PURPOSE_CONFIG",
     "BASH_AGENT_CONFIG",
 ]
 
-# Get workspace and skills directories (same as main agent)
-# __file__ is backend/subagent/builtins.py, so parent.parent = backend/
-BACKEND_DIR = Path(__file__).parent.parent
-WORKSPACE_DIR = BACKEND_DIR / "workspace"
-SKILLS_DIR = BACKEND_DIR / ".agents" / "skills"
+# Get workspace and skills directories from central settings
+WORKSPACE_DIR = settings.WORKSPACE_DIR
+SKILLS_DIR = settings.SKILLS_DIR
 
 # =============================================================================
 # General Purpose Subagent
@@ -56,7 +54,7 @@ When using file tools with relative paths, they resolve to the workspace directo
 </working_directory>
 """,
     tools=None,  # Inherit all tools from parent
-    disallowed_tools=["task", "execute_skill_script"],  # Prevent nesting
+    disallowed_tools=["task", "task_async"],  # Prevent nesting
     model="inherit",
     max_turns=100,
 )
@@ -115,7 +113,7 @@ Before running complex command sequences, check if there's an existing skill tha
 </skills>
 """,
     tools=["run_command", "list_directory", "read_file", "write_file", "find_files", "list_skills", "get_skill", "execute_skill_script"],
-    disallowed_tools=["task"],  # Prevent subagent nesting
+    disallowed_tools=["task", "task_async"],  # Prevent subagent nesting
     model="inherit",
     max_turns=60,
 )

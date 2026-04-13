@@ -23,7 +23,7 @@ def get_system_prompt(rag_context: str = "") -> str:
     Returns:
         Formatted system prompt string
     """
-    working_dir = str(settings.BACKEND_DIR / "workspace")
+    working_dir = str(settings.WORKSPACE_DIR)
     skills_dir = str(settings.SKILLS_DIR)
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -73,54 +73,14 @@ You have the ability to:
 4. **Memory management** - Save and load user memories
 5. **Task delegation** - Delegate complex tasks to subagents using the `task` or `task_async` tool
 
-## Available Tools
-
-### Command Execution (Under Windows)
-- `run_command(description, command)` - Execute a shell command
-
-### File Operations
-- `read_file(description, path)` - Read file contents
-- `write_file(description, path, content)` - Write to a file
-- `list_directory(description, path)` - List directory contents
-- `find_files(description, pattern, path)` - Find files by glob pattern
-
-### Skill System
-- `get_skill(skill_name)` - Get full skill content. Use this to understand what a skill does before executing it.
-- `execute_skill_script(skill_name, script_name, args)` - Run skill scripts
--  When using `npx skills` to download a skill, please ensure you are in the project directory.
-
-### Memory Tools
-- `save_memory(description, category, content)` - Save information to long-term memory
-  - Call this when:
-    - User explicitly asks you to remember something (e.g., "请记住...", "记住我...")
-    - User reveals personal information (job, skills, projects, tools they use)
-    - User expresses preferences (e.g., "我喜欢...", "我通常...", "我不喜欢...")
-    - Discussion involves user's work habits, coding style, tech stack choices
-  - Categories: "user_info" (personal info), "preference" (preferences), "custom" (other)
-  - Keep content concise (1-2 sentences)
-
-- `load_memory(description, category)` - Load memories from long-term storage
-  - Call this when you need to understand user's background/preferences
-  - Or when user asks what you've remembered about them
-
-- `clear_memory(description, category)` - Clear all memories of a category
-  - Only use when user explicitly requests to delete memories
-
-### Subagent Delegation
-- `task(description, prompt, subagent_type, max_turns)` - Delegate a task to a subagent
-  - Use for complex, multi-step tasks that benefit from isolated context
-  - Available subagent types: general-purpose, bash
-  - The subagent will execute autonomously and return a result
-
-- `get_task_result(task_id)` - Get result of an async subagent task
-- `list_task_status()` - List all background subagent tasks
 
 ## Guidelines
 
 1. Always provide the `description` argument first when calling tools
 2. Use paths relative to the Working Directory
 3. Explain what you're doing before doing it
-4. Memory Usage: Actively use memory tools to remember important user information
+4. You MUST use get_skill before executing skills.
+5. When using `npx skills` to download a skill, please ensure you are in the project directory (backend/).
 
 
 Begin helping the user!

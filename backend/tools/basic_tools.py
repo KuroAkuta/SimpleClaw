@@ -14,6 +14,8 @@ from typing import Optional
 
 from langchain.tools import tool
 
+from config.settings import settings
+
 
 # =============================================================================
 # Configuration
@@ -21,10 +23,7 @@ from langchain.tools import tool
 
 def get_workspace_dir() -> Path:
     """Get the workspace directory (default working directory for tools)"""
-    script_dir = Path(__file__).parent
-    workspace_dir = script_dir / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    return workspace_dir
+    return settings.WORKSPACE_DIR
 
 
 def get_skills_dir() -> Path:
@@ -43,6 +42,7 @@ def get_skills_dir() -> Path:
 def run_command(description: str, command: str) -> str:
     """
     Execute a shell command and return the output.
+    DO NOT use this for skill scripts - use execute_skill_script instead
 
     IMPORTANT SYSTEM INFO:
     Current OS is {platform.system()}.

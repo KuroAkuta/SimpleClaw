@@ -1242,6 +1242,7 @@ body {
 .subagent-float-multi {
     position: fixed;
     top: 20px;
+    bottom: auto; /* 覆盖 .subagent-float 的 bottom 设置 */
     width: 280px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -1250,6 +1251,15 @@ body {
     z-index: 500;
     overflow: hidden;
     transition: all 0.3s ease;
+}
+
+/* 展开/收起状态 */
+.subagent-float-multi.collapsed {
+    width: auto;
+}
+
+.subagent-float-multi.collapsed .subagent-float-content {
+    display: none;
 }
 
 .subagent-float:hover {
@@ -1274,6 +1284,17 @@ body {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-primary);
+}
+
+.subagent-float-title::after {
+    content: '▼';
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    transition: transform 0.3s ease;
+}
+
+.subagent-float-multi.collapsed .subagent-float-title::after {
+    transform: rotate(-90deg);
 }
 
 .subagent-float-title .status-dot {

@@ -46,6 +46,8 @@ class Settings:
     PROJECT_DIR = BACKEND_DIR.parent
     # Skills directory is in backend/.agents/skills/ (not project root)
     SKILLS_DIR = BACKEND_DIR / ".agents" / "skills"
+    # Workspace directory - shared by main agent and subagents
+    WORKSPACE_DIR = BACKEND_DIR / "workspace"
 
     # Server
     HOST = os.getenv("HOST", "0.0.0.0")

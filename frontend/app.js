@@ -1381,14 +1381,14 @@ function showSubagentFloat(taskId, taskDescription, subagentType) {
     floatEl.style.display = 'block';
 
     floatEl.innerHTML = `
-        <div class="subagent-float-header">
+        <div class="subagent-float-header" onclick="toggleSubagentFloat('${taskId}')" style="cursor: pointer;">
             <div class="subagent-float-title">
                 <span class="status-dot running"></span>
                 <span class="subagent-float-main-title">子 agent 运行中</span>
             </div>
             <div class="subagent-float-actions">
-                <button class="btn-float-action" onclick="showSubagentModal('${taskId}')" title="查看详情">📋</button>
-                <button class="btn-float-close" onclick="closeSingleSubagentFloat('${taskId}')" title="关闭">✕</button>
+                <button class="btn-float-action" onclick="event.stopPropagation(); showSubagentModal('${taskId}')" title="查看详情">📋</button>
+                <button class="btn-float-close" onclick="event.stopPropagation(); closeSingleSubagentFloat('${taskId}')" title="关闭">✕</button>
             </div>
         </div>
         <div class="subagent-float-content">
@@ -1425,7 +1425,7 @@ function showSubagentFloat(taskId, taskDescription, subagentType) {
     // 设置位置：每个新悬浮窗向左偏移 300px（基础 right 20px + 索引 * 300px）
     const baseRight = 20;
     const offset = 300;
-    const floatIndex = activeSubagentFloats.size - 1; // 当前是第几个（0-based）
+    const floatIndex = activeSubagentFloats.size; // 当前是第几个（0-based）
     floatEl.style.right = `${baseRight + floatIndex * offset}px`;
     floatEl.style.top = '20px';
 
@@ -1509,6 +1509,15 @@ function recalculateFloatPositions() {
             index++;
         }
     });
+}
+
+// 切换悬浮窗展开/收起状态
+function toggleSubagentFloat(taskId) {
+    const floatData = activeSubagentFloats.get(taskId);
+    if (!floatData) return;
+
+    const floatEl = floatData.element;
+    floatEl.classList.toggle('collapsed');
 }
 
 // 打开悬浮窗详情模态框（通过按钮点击）
