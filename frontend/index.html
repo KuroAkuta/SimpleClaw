@@ -222,6 +222,32 @@
         </div>
     </div>
 
+    <!-- TODO List 面板 -->
+    <div id="todoPanel" class="todo-panel" style="display: none;">
+        <div class="todo-panel-header">
+            <div class="todo-panel-title">
+                <span class="todo-icon">📋</span>
+                <span>任务列表</span>
+            </div>
+            <div class="todo-panel-actions">
+                <button class="btn-float-close" onclick="closeTodoPanel()" title="关闭">✕</button>
+            </div>
+        </div>
+        <div class="todo-panel-content" id="todoPanelContent">
+            <div class="todo-empty-state">
+                <p>暂无任务</p>
+                <p class="text-muted">AI 会在处理复杂任务时自动创建任务列表</p>
+            </div>
+        </div>
+        <div class="todo-panel-footer" id="todoPanelFooter" style="display: none;">
+            <span class="todo-summary">
+                <span class="todo-count-completed">0</span> 完成 /
+                <span class="todo-count-progress">0</span> 进行中 /
+                <span class="todo-count-pending">0</span> 待处理
+            </span>
+        </div>
+    </div>
+
     <!-- 子 agent 任务详情 Modal (可选查看) -->
     <div id="subagentTaskModal" class="modal" style="display: none;">
         <div class="modal-content modal-large">
@@ -237,6 +263,24 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="subagentCancelBtn" onclick="cancelSubagentTask()">取消任务</button>
                 <button class="btn btn-primary" onclick="closeSubagentTaskModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TODO List 详情 Modal -->
+    <div id="todoDetailModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📋 任务列表详情</h3>
+                <button class="modal-close" onclick="closeTodoDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="todoModalContent">
+                    <!-- 动态填充内容 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeTodoDetailModal()">关闭</button>
             </div>
         </div>
     </div>
@@ -284,6 +328,12 @@
             if (e.target.id === 'knowledgeDetailModal') {
                 closeKnowledgeDetailModal();
             }
+            if (e.target.id === 'subagentTaskModal') {
+                closeSubagentTaskModal();
+            }
+            if (e.target.id === 'todoDetailModal') {
+                closeTodoDetailModal();
+            }
         });
 
         // Handle escape key to close modals
@@ -292,6 +342,8 @@
                 closeCreateKnowledgeModal();
                 closeEditKnowledgeModal();
                 closeKnowledgeDetailModal();
+                closeSubagentTaskModal();
+                closeTodoDetailModal();
             }
         });
     </script>

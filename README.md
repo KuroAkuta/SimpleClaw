@@ -18,6 +18,8 @@ skill读取：
 ![alt text](image-6.png)
 后台异步多agent：
 ![alt text](image-7.png)
+任务列表todolist:
+![alt text](image-8.png)
 ## 项目结构
 
 ```
@@ -31,7 +33,8 @@ Simple_agent_web/
 │   │   └── settings.py         # 配置管理
 │   ├── tools/
 │   │   ├── basic_tools.py         # 基础工具（命令行、skills等）
-│   │   └── memory_tools.py        # 长期记忆工具  
+│   │   ├── memory_tools.py        # 长期记忆工具
+│   │   └── todo_tools.py          # todolist工具   
 │   ├── models/
 │   │   ├── state.py            # AgentState 和类型定义
 │   │   └── schemas.py          # Pydantic 请求/响应模型
@@ -125,7 +128,8 @@ python -m http.server 3000
 - ✅ **Skill支持**（./backend/.agents/skills）
 - ✅ **命令行运行**
 - ✅ 个人知识库、RAG检索、重排序
-- ✅ 多格式文档支持 - 支持 PDF、Word、Excel、PPT、Markdown 等常见格式自动解析
+- ✅ 知识库多格式文档支持 - 支持 PDF、Word、Excel、PPT、Markdown 等常见格式自动解析
+- ✅ 复杂任务拆解为TodoList
 - ✅ 长期记忆 - 主动记录用户信息、偏好，以及用户想要agent记住的
 - ✅ **子Agent / 后台子Agent 任务动态创建 支持多线程并行运行**
 

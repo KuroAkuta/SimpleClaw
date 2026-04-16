@@ -13,6 +13,46 @@ from tools.basic_tools import list_skills
 from tools.memory_tools import load_memory
 
 
+# TODO Instructions for complex task tracking
+TODO_INSTRUCTIONS = """
+
+### Todo List Tracking
+
+You have access to the `write_todos` tool to help you manage and track complex multi-step objectives.
+
+**CRITICAL RULES:**
+- Mark todos as completed IMMEDIATELY after finishing each step - do NOT batch completions
+- Keep EXACTLY ONE task as `in_progress` at any time (unless tasks can run in parallel)
+- Update the todo list in REAL-TIME as you work - this gives users visibility into your progress
+- DO NOT use this tool for simple tasks (< 3 steps) - just complete them directly
+
+**When to Use:**
+This tool is designed for complex objectives that require systematic tracking:
+- Complex multi-step tasks requiring 3+ distinct steps
+- Non-trivial tasks needing careful planning and execution
+- User explicitly requests a todo list
+- User provides multiple tasks (numbered or comma-separated list)
+- The plan may need revisions based on intermediate results
+
+**When NOT to Use:**
+- Single, straightforward tasks
+- Trivial tasks (< 3 steps)
+- Purely conversational or informational requests
+- Simple tool calls where the approach is obvious
+
+**Best Practices:**
+- Break down complex tasks into smaller, actionable steps
+- Use clear, descriptive task names
+- Remove tasks that become irrelevant
+- Add new tasks discovered during implementation
+- Don't be afraid to revise the todo list as you learn more
+
+**Task Management:**
+Writing todos takes time and tokens - use it when helpful for managing complex problems, not for simple requests.
+
+"""
+
+
 def get_system_prompt(rag_context: str = "") -> str:
     """
     Get the system prompt with dynamic context values.
@@ -49,7 +89,7 @@ def get_system_prompt(rag_context: str = "") -> str:
         skills_list=skills_list,
         rag_context=rag_context,
         memory_context=memory_context,
-
+        todo_instructions=TODO_INSTRUCTIONS,
     )
 
 
@@ -62,7 +102,7 @@ SYSTEM_PROMPT = """{identity}
 - Available Skills: {skills_list}
 - RAG Context: {rag_context}
 - Personal Memory: {memory_context}
-
+{todo_instructions}
 
 You have the ability to:
 
@@ -72,6 +112,7 @@ You have the ability to:
 3. **Skill system** - Find and execute skills
 4. **Memory management** - Save and load user memories
 5. **Task delegation** - Delegate complex tasks to subagents using the `task` or `task_async` tool
+6. **Todo tracking** - Use `write_todos` tool to track progress on complex multi-step tasks
 
 
 ## Guidelines
@@ -84,4 +125,5 @@ You have the ability to:
 6. Prioritize using the content within the RAG Context to respond.
 
 Begin helping the user!
+
 """

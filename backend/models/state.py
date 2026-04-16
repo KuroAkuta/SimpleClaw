@@ -20,6 +20,8 @@ class AgentState(dict):
         pending_tool_calls: List of tool calls waiting for confirmation
         enabled_knowledge_bases: List of enabled knowledge base IDs for RAG
         rag_context: Retrieved context from knowledge bases
+        todos: List of todo items for tracking complex tasks (each item: {"content": str, "status": str})
+        thread_id: Thread/session ID for associating todos and other per-thread data
     """
     messages: Annotated[List[AnyMessage], add_messages]
     skill_context: Optional[str] = None
@@ -29,3 +31,5 @@ class AgentState(dict):
     pending_tool_calls: Optional[List[Dict[str, Any]]] = None
     enabled_knowledge_bases: List[str] = []
     rag_context: str = ""
+    todos: Optional[List[Dict[str, str]]] = None
+    thread_id: str = "default"

@@ -16,6 +16,10 @@ let currentSubagentTaskId = null;
 let subagentTaskPollInterval = null;
 let subagentFloatDragState = null; // 拖动状态：{ isDragging, offsetX, offsetY, element }
 
+// Todo list state
+let currentTodoList = []; // 当前 TODO 列表
+let todoPanelPollInterval = null; // TODO 面板轮询定时器
+
 // 初始化悬浮窗拖动功能（旧版，保留用于兼容）
 function initSubagentFloatDrag() {
     const floatEl = document.getElementById('subagentTaskFloat');
@@ -467,6 +471,40 @@ async function sendMessage() {
                                 <pre><code>${escapeHtml(data.content)}</code></pre>
                             `;
                             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+                            // 检测 write_todos 工具调用，更新 TODO 面板
+                            if (data.tool_name === 'write_todos') {
+                                console.log('[TODO] write_todos called');
+                                console.log('[TODO] Raw content:', data.content);
+                                console.log('[TODO] Content type:', typeof data.content);
+                                try {
+                                    let todoData;
+                                    // 尝试直接解析，如果失败则尝试解析嵌套 JSON
+                                    try {
+                                        todoData = JSON.parse(data.content);
+                                    } catch (innerE) {
+                                        console.log('[TODO] Direct parse failed, trying nested parse...');
+                                        // 如果是嵌套的 JSON 字符串，再次解析
+                                        const unescaped = data.content.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                                        todoData = JSON.parse(unescaped);
+                                    }
+                                    console.log('[TODO] Parsed todoData:', todoData);
+                                    console.log('[TODO] todoData.todos:', todoData?.todos);
+                                    console.log('[TODO] Is array:', Array.isArray(todoData?.todos));
+
+                                    if (todoData.todos && Array.isArray(todoData.todos)) {
+                                        currentTodoList = todoData.todos;
+                                        console.log('[TODO] Calling showTodoPanel with:', todoData.todos);
+                                        showTodoPanel(todoData.todos);
+                                        console.log('[TODO] showTodoPanel completed');
+                                    } else {
+                                        console.log('[TODO] No valid todos found in data');
+                                    }
+                                } catch (e) {
+                                    console.error('[TODO] Failed to parse todo data:', e);
+                                    console.error('[TODO] Error stack:', e.stack);
+                                }
+                            }
                         } else if (data.type === 'tool_pending') {
                             waitingForConfirmation = true;
                             isStreaming = false;
@@ -759,6 +797,38 @@ async function resumeAfterConfirmation() {
                                 `;
                                 lastToolContent = data.content;
                                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            }
+
+                            // 检测 write_todos 工具调用，更新 TODO 面板
+                            if (data.tool_name === 'write_todos') {
+                                console.log('[TODO] [resume] write_todos called');
+                                console.log('[TODO] [resume] Raw content:', data.content);
+                                try {
+                                    let todoData;
+                                    // 尝试直接解析，如果失败则尝试解析嵌套 JSON
+                                    try {
+                                        todoData = JSON.parse(data.content);
+                                    } catch (innerE) {
+                                        console.log('[TODO] [resume] Direct parse failed, trying nested parse...');
+                                        // 如果是嵌套的 JSON 字符串，再次解析
+                                        const unescaped = data.content.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                                        todoData = JSON.parse(unescaped);
+                                    }
+                                    console.log('[TODO] [resume] Parsed todoData:', todoData);
+                                    console.log('[TODO] [resume] todoData.todos:', todoData?.todos);
+
+                                    if (todoData.todos && Array.isArray(todoData.todos)) {
+                                        currentTodoList = todoData.todos;
+                                        console.log('[TODO] [resume] Calling showTodoPanel with:', todoData.todos);
+                                        showTodoPanel(todoData.todos);
+                                        console.log('[TODO] [resume] showTodoPanel completed');
+                                    } else {
+                                        console.log('[TODO] [resume] No valid todos found in data');
+                                    }
+                                } catch (e) {
+                                    console.error('[TODO] [resume] Failed to parse todo data:', e);
+                                    console.error('[TODO] [resume] Error stack:', e.stack);
+                                }
                             }
                         } else if (data.type === 'ai') {
                             if (!finalAiMessageDiv) {
@@ -2076,5 +2146,169 @@ async function cancelSubagentTask() {
 function checkForSubagentTask(messageContent) {
     const taskPattern = /task\(|Delegating to subagent|subagent|任务委托/i;
     return taskPattern.test(messageContent);
+}
+
+
+// ==================== Todo List Functions ====================
+
+// 显示 TODO 面板
+function showTodoPanel(todos) {
+    const todoPanel = document.getElementById('todoPanel');
+    const todoPanelContent = document.getElementById('todoPanelContent');
+    const todoPanelFooter = document.getElementById('todoPanelFooter');
+
+    if (!todos || todos.length === 0) {
+        todoPanelContent.innerHTML = `
+            <div class="todo-empty-state">
+                <p>暂无任务</p>
+                <p class="text-muted">AI 会在处理复杂任务时自动创建任务列表</p>
+            </div>
+        `;
+        todoPanelFooter.style.display = 'none';
+        return;
+    }
+
+    // 更新 TODO 列表
+    currentTodoList = todos;
+
+    // 渲染 TODO 列表
+    renderTodoList(todos);
+
+    // 更新底部统计
+    updateTodoSummary(todos);
+
+    // 显示面板
+    todoPanel.style.display = 'block';
+    todoPanelFooter.style.display = 'block';
+
+    // 添加点击展开详情的事件
+    todoPanelContent.onclick = () => {
+        showTodoDetailModal(todos);
+    };
+}
+
+// 渲染 TODO 列表
+function renderTodoList(todos) {
+    const todoPanelContent = document.getElementById('todoPanelContent');
+
+    const statusIcon = {
+        'pending': '⏳',
+        'in_progress': '🔄',
+        'completed': '✅'
+    };
+
+    const statusClass = {
+        'pending': 'pending',
+        'in_progress': 'in-progress',
+        'completed': 'completed'
+    };
+
+    let html = '';
+    todos.forEach((todo, index) => {
+        const icon = statusIcon[todo.status] || '❓';
+        const cls = statusClass[todo.status] || '';
+        html += `
+            <div class="todo-item ${cls}">
+                <span class="todo-item-icon">${icon}</span>
+                <span class="todo-item-content">${escapeHtml(todo.content)}</span>
+            </div>
+        `;
+    });
+
+    todoPanelContent.innerHTML = html;
+}
+
+// 更新 TODO 统计
+function updateTodoSummary(todos) {
+    const completed = todos.filter(t => t.status === 'completed').length;
+    const inProgress = todos.filter(t => t.status === 'in_progress').length;
+    const pending = todos.filter(t => t.status === 'pending').length;
+
+    document.getElementById('todoPanelFooter').querySelector('.todo-count-completed').textContent = completed;
+    document.getElementById('todoPanelFooter').querySelector('.todo-count-progress').textContent = inProgress;
+    document.getElementById('todoPanelFooter').querySelector('.todo-count-pending').textContent = pending;
+}
+
+// 关闭 TODO 面板
+function closeTodoPanel() {
+    const todoPanel = document.getElementById('todoPanel');
+    todoPanel.style.display = 'none';
+}
+
+// 测试函数 - 在控制台输入 testTodoPanel() 可以手动显示 TODO 面板
+function testTodoPanel() {
+    const testTodos = [
+        { content: '分析项目结构', status: 'completed' },
+        { content: '创建文档说明主要组件', status: 'in_progress' },
+        { content: '编写测试用例', status: 'pending' }
+    ];
+    showTodoPanel(testTodos);
+    console.log('TODO panel shown with test data');
+}
+
+// 显示 TODO 详情模态框
+function showTodoDetailModal(todos) {
+    const modal = document.getElementById('todoDetailModal');
+    const modalContent = document.getElementById('todoModalContent');
+
+    const statusIcon = {
+        'pending': '⏳',
+        'in_progress': '🔄',
+        'completed': '✅'
+    };
+
+    const statusClass = {
+        'pending': 'pending',
+        'in_progress': 'in-progress',
+        'completed': 'completed'
+    };
+
+    let html = '';
+    if (!todos || todos.length === 0) {
+        html = '<p class="text-muted" style="text-align: center; padding: 2rem;">暂无任务</p>';
+    } else {
+        html = '<div class="todo-detail-list">';
+        todos.forEach((todo, index) => {
+            const icon = statusIcon[todo.status] || '❓';
+            const cls = statusClass[todo.status] || '';
+            html += `
+                <div class="todo-detail-item ${cls}">
+                    <span class="todo-detail-icon">${icon}</span>
+                    <div class="todo-detail-content">
+                        <span class="todo-detail-status">${todo.status}</span>
+                        <span class="todo-detail-text">${escapeHtml(todo.content)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+
+    modalContent.innerHTML = html;
+    modal.style.display = 'flex';
+}
+
+// 关闭 TODO 详情模态框
+function closeTodoDetailModal() {
+    const modal = document.getElementById('todoDetailModal');
+    modal.style.display = 'none';
+}
+
+// 更新 TODO 面板（用于轮询或手动刷新）
+function updateTodoPanel(todos) {
+    if (!todos || todos.length === 0) {
+        closeTodoPanel();
+        return;
+    }
+
+    currentTodoList = todos;
+    renderTodoList(todos);
+    updateTodoSummary(todos);
+
+    const todoPanel = document.getElementById('todoPanel');
+    if (todoPanel.style.display === 'none') {
+        todoPanel.style.display = 'block';
+        document.getElementById('todoPanelFooter').style.display = 'block';
+    }
 }
 

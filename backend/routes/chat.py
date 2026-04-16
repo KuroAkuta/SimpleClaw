@@ -105,14 +105,14 @@ async def chat_stream(request: ChatRequest):
     """Streaming chat endpoint with SSE."""
     session_id, session = session_manager.get_or_create_session(request.session_id)
 
-    # Create state for graph
+    # Create state for graph - load tool_call_confirmed from session to preserve state across iterations
     state = {
         "messages": list(session["state"]["messages"]),
         "skill_context": session["state"].get("skill_context"),
         "current_task": request.message,
         "turn_count": session["state"].get("turn_count", 0),
-        "tool_call_confirmed": False,
-        "pending_tool_calls": None,
+        "tool_call_confirmed": session["state"].get("tool_call_confirmed", False),
+        "pending_tool_calls": session["state"].get("pending_tool_calls"),
         "enabled_knowledge_bases": request.enabled_knowledge_bases or [],
     }
 
@@ -150,44 +150,68 @@ async def chat_stream(request: ChatRequest):
                 if last_msg:
                     if isinstance(last_msg, AIMessage):
                         has_tool_calls = getattr(last_msg, "tool_calls", [])
-                        if has_tool_calls and not event.get("tool_call_confirmed", False):
-                            # Check for subagent task calls - only send subagent_started for async tasks
-                            # For sync tasks, show the float window after user confirms and execution completes
-                            for tool_call in has_tool_calls:
-                                tool_name = tool_call.get("name", "")
-                                tool_args = tool_call.get("args", {})
-
-                            # For sync tasks, we'll show the float window after tool execution completes
-                            # Don't send subagent_started here - wait until after user confirms in /chat/resume
-
-                            yield {
-                                "event": "tool_pending",
-                                "data": json.dumps({
-                                    "type": "tool_pending",
-                                    "tool_calls": has_tool_calls,
-                                    "content": accumulated_ai_content,
-                                    "waiting_confirmation": True
-                                })
+                        if has_tool_calls:
+                            # Check if these are auto-exec tools (safe/read-only operations)
+                            auto_exec_tools = {
+                                # Todo management
+                                "write_todos", "get_todos", "clear_todos",
+                                # Read-only file operations
+                                "read_file", "list_directory", "find_files",
+                                # Skill system (read-only)
+                                "list_skills", "get_skill",
+                                # Memory management
+                                "load_memory", "save_memory", "clear_memory",
                             }
-                            session_manager.update_session_state(
-                                session_id=session_id,
-                                messages=final_messages,
-                                turn_count=event.get("turn_count", 0),
-                                tool_call_confirmed=False,
-                                pending_tool_calls=has_tool_calls
-                            )
-                            await anyio.sleep(0)
-                            return
-                    elif isinstance(last_msg, ToolMessage):
-                        accumulated_ai_content = ""
+                            tool_names = [tc.get("name", "") for tc in has_tool_calls]
+                            all_auto_exec = all(name in auto_exec_tools for name in tool_names)
 
-                        # Check if this is a subagent task result
-                        tool_call_id = getattr(last_msg, "tool_call_id", "")
+                            # Debug logging
+                            print(f"[DEBUG] Tool calls: {tool_names}, all_auto_exec: {all_auto_exec}, confirmed: {event.get('tool_call_confirmed', False)}")
+
+                            # Only require confirmation for non-auto-exec tools AND not already confirmed
+                            if not all_auto_exec and not event.get("tool_call_confirmed", False):
+                                # Non-auto-exec tools, wait for user confirmation
+                                print(f"[DEBUG] Waiting for confirmation")
+                                yield {
+                                    "event": "tool_pending",
+                                    "data": json.dumps({
+                                        "type": "tool_pending",
+                                        "tool_calls": has_tool_calls,
+                                        "content": accumulated_ai_content,
+                                        "waiting_confirmation": True
+                                    })
+                                }
+                                session_manager.update_session_state(
+                                    session_id=session_id,
+                                    messages=final_messages,
+                                    turn_count=event.get("turn_count", 0),
+                                    tool_call_confirmed=False,
+                                    pending_tool_calls=has_tool_calls
+                                )
+                                await anyio.sleep(0)
+                                return
+                            elif all_auto_exec:
+                                # Auto-exec tools - let graph continue without asking for confirmation
+                                print(f"[DEBUG] Auto-exec, continuing")
+                                state["tool_call_confirmed"] = True  # Update graph state for tool_node
+                                session_manager.update_session_state(
+                                    session_id=session_id,
+                                    messages=final_messages,
+                                    turn_count=event.get("turn_count", 0),
+                                    tool_call_confirmed=True,
+                                    pending_tool_calls=has_tool_calls
+                                )
+                    elif isinstance(last_msg, ToolMessage):
+                        # Tool execution result - send it to frontend
+                        accumulated_ai_content = ""
                         tool_name = getattr(last_msg, "name", "")
+
+                        # Debug logging for tool execution
+                        print(f"[DEBUG] ToolMessage received: name={tool_name}, content={str(last_msg.content)[:50]}...")
 
                         # Check for subagent task completion
                         if tool_name == "task" or tool_name == "task_async":
-                            task_id = subagent_tasks_started.get(tool_call_id, "sync-task")
+                            task_id = subagent_tasks_started.get(last_msg.tool_call_id, "sync-task")
                             tool_result = str(last_msg.content) if last_msg.content else ""
 
                             # Check for error/failure
@@ -221,11 +245,12 @@ async def chat_stream(request: ChatRequest):
                         }
                         await anyio.sleep(0)
 
-        # Update session state
+        # Update session state and reset tool_call_confirmed for next iteration in chat_stream
         session_manager.update_session_state(
             session_id=session_id,
             messages=final_messages,
             turn_count=state.get("turn_count", 0),
+            tool_call_confirmed=False,  # Reset for next request
         )
 
         # Send done signal
@@ -263,6 +288,7 @@ async def chat_resume(request: ChatRequest):
         list_skills, get_skill, execute_skill_script,
     )
     from tools.memory_tools import save_memory, load_memory, clear_memory
+    from tools.todo_tools import write_todos, get_todos, clear_todos
 
     # Build base tools dictionary
     tools_by_name = {
@@ -277,6 +303,9 @@ async def chat_resume(request: ChatRequest):
         "save_memory": save_memory,
         "load_memory": load_memory,
         "clear_memory": clear_memory,
+        "write_todos": write_todos,
+        "get_todos": get_todos,
+        "clear_todos": clear_todos,
     }
 
     # Add subagent tools if available
@@ -319,6 +348,9 @@ async def chat_resume(request: ChatRequest):
 
     # Add tool results to state
     state["messages"].extend(tool_results)
+    # Reset tool_call_confirmed after executing confirmed tools
+    # This ensures subsequent dangerous tools will require confirmation
+    state["tool_call_confirmed"] = False
 
     async def generate():
         # Send tool results first
@@ -381,26 +413,62 @@ async def chat_resume(request: ChatRequest):
                     if isinstance(last_msg, AIMessage):
                         has_tool_calls = getattr(last_msg, "tool_calls", [])
                         if has_tool_calls:
-                            yield {
-                                "event": "tool_pending",
-                                "data": json.dumps({
-                                    "type": "tool_pending",
-                                    "tool_calls": has_tool_calls,
-                                    "content": accumulated_ai_content,
-                                    "waiting_confirmation": True
-                                })
+                            # Check if these are auto-exec tools (same logic as chat_stream)
+                            auto_exec_tools = {
+                                # Todo management
+                                "write_todos", "get_todos", "clear_todos",
+                                # Read-only file operations
+                                "read_file", "list_directory", "find_files",
+                                # Skill system (read-only)
+                                "list_skills", "get_skill",
+                                # Memory management
+                                "load_memory", "save_memory", "clear_memory",
                             }
-                            session_manager.update_session_state(
-                                session_id=session_id,
-                                messages=final_messages,
-                                turn_count=event.get("turn_count", 0),
-                                tool_call_confirmed=False,
-                                pending_tool_calls=has_tool_calls
-                            )
-                            await anyio.sleep(0)
-                            return
+                            tool_names = [tc.get("name", "") for tc in has_tool_calls]
+                            all_auto_exec = all(name in auto_exec_tools for name in tool_names)
+
+                            # Debug logging
+                            print(f"[DEBUG] [chat_resume] Tool calls: {tool_names}, all_auto_exec: {all_auto_exec}")
+
+                            # Only require confirmation for non-auto-exec tools
+                            if not all_auto_exec:
+                                yield {
+                                    "event": "tool_pending",
+                                    "data": json.dumps({
+                                        "type": "tool_pending",
+                                        "tool_calls": has_tool_calls,
+                                        "content": accumulated_ai_content,
+                                        "waiting_confirmation": True
+                                    })
+                                }
+                                session_manager.update_session_state(
+                                    session_id=session_id,
+                                    messages=final_messages,
+                                    turn_count=event.get("turn_count", 0),
+                                    tool_call_confirmed=False,
+                                    pending_tool_calls=has_tool_calls
+                                )
+                                await anyio.sleep(0)
+                                return
+                            # else: auto-exec tools, let graph continue
+                            elif all_auto_exec:
+                                # Auto-exec tools - let graph continue without asking for confirmation
+                                print(f"[DEBUG] [chat_resume] Auto-exec, continuing")
+                                state["tool_call_confirmed"] = True  # Update graph state for tool_node
+                                session_manager.update_session_state(
+                                    session_id=session_id,
+                                    messages=final_messages,
+                                    turn_count=event.get("turn_count", 0),
+                                    tool_call_confirmed=True,
+                                    pending_tool_calls=has_tool_calls
+                                )
                     elif isinstance(last_msg, ToolMessage):
                         accumulated_ai_content = ""
+                        tool_name = getattr(last_msg, "name", "")
+
+                        # Debug logging for tool execution
+                        print(f"[DEBUG] [chat_resume] ToolMessage received: name={tool_name}, content={str(last_msg.content)[:50]}...")
+
                         yield {
                             "event": "message",
                             "data": json.dumps({
@@ -411,11 +479,12 @@ async def chat_resume(request: ChatRequest):
                         }
                         await anyio.sleep(0)
 
-        # Update session state
+        # Update session state and reset tool_call_confirmed for next iteration in chat_resume
         session_manager.update_session_state(
             session_id=session_id,
             messages=final_messages,
             turn_count=state.get("turn_count", 0),
+            tool_call_confirmed=False,  # Reset for next request
         )
 
         # Send done signal

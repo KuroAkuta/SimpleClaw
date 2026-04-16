@@ -100,9 +100,17 @@ async def agent_node(state: AgentState) -> Dict:
             "pending_tool_calls": pending_calls,
         }
     elif has_tool_calls and already_confirmed:
-        # Already confirmed, proceed normally
-        pass
+        # Already confirmed, proceed normally - but reset confirmed state after this iteration
+        # Confirmation is per-batch, not persistent across all future tool calls
+        new_turn_count = state.get("turn_count", 0) + 1
+        return {
+            "messages": [response],
+            "turn_count": new_turn_count,
+            "tool_call_confirmed": False,  # Reset after using the confirmation
+            "pending_tool_calls": None,
+        }
     else:
+        # No tool calls - reset confirmation state
         pass
 
     new_turn_count = state.get("turn_count", 0) + 1
@@ -134,6 +142,7 @@ async def tool_node(state: AgentState) -> Dict:
         get_skill, execute_skill_script,
     )
     from tools.memory_tools import save_memory, load_memory, clear_memory
+    from tools.todo_tools import write_todos, get_todos, clear_todos
 
     # Build base tools dictionary
     tools_by_name = {
@@ -147,6 +156,9 @@ async def tool_node(state: AgentState) -> Dict:
         "save_memory": save_memory,
         "load_memory": load_memory,
         "clear_memory": clear_memory,
+        "write_todos": write_todos,
+        "get_todos": get_todos,
+        "clear_todos": clear_todos,
     }
 
     # Add subagent tools if available
@@ -159,15 +171,34 @@ async def tool_node(state: AgentState) -> Dict:
 
     last_message = state["messages"][-1]
 
-    # Check if tool calls are confirmed
-    if not state.get("tool_call_confirmed", False):
-        # Not confirmed yet, don't execute tools
-        return {"messages": [], "tool_call_confirmed": False}
+    # Check for auto-exec tools (can be executed without user confirmation)
+    auto_exec_tools = {
+        # Todo management
+        "write_todos", "get_todos", "clear_todos",
+        # Read-only file operations
+        "read_file", "list_directory", "find_files",
+        # Skill system (read-only)
+        "list_skills", "get_skill",
+        # Memory management
+        "load_memory", "save_memory", "clear_memory",
+    }
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
         return {"messages": [], "tool_call_confirmed": False}
 
+    # Check if all tool calls are auto-exec
+    tool_names = [tc.get("name", "") for tc in last_message.tool_calls]
+    all_auto_exec = all(name in auto_exec_tools for name in tool_names)
+
+    # Check confirmation state
+    tool_call_confirmed = state.get("tool_call_confirmed", False)
+
+    if not tool_call_confirmed and not all_auto_exec:
+        # Not confirmed and has non-auto-exec tools, skip execution
+        return {"messages": [], "tool_call_confirmed": False}
+
     results = []
+
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         tool_args = tool_call.get("args", {})
@@ -177,7 +208,22 @@ async def tool_node(state: AgentState) -> Dict:
         else:
             try:
                 tool_func = tools_by_name[tool_name]
+
+                # Auto-inject thread_id for todo tools
+                if tool_name in ("write_todos", "get_todos", "clear_todos"):
+                    thread_id = state.get("thread_id", "default")
+                    if "thread_id" not in tool_args:
+                        tool_args = {**tool_args, "thread_id": thread_id}
+
                 result = tool_func.invoke(tool_args)
+
+                # Debug logging for write_todos
+                if tool_name == "write_todos":
+                    print(f"[DEBUG] write_todos executed, result: {result[:100]}...")
+                    # Store todos in state for future reference
+                    todos = tool_args.get("todos", [])
+                    state["todos"] = todos
+
             except Exception as e:
                 result = f"Error: {e}"
 
@@ -189,6 +235,9 @@ async def tool_node(state: AgentState) -> Dict:
             )
         )
 
+    # Always reset tool_call_confirmed to False after tool execution
+    # This ensures dangerous tools always require confirmation in the next iteration
+    # Auto-exec tools will still execute because tool_node checks all_auto_exec independently
     return {"messages": results, "tool_call_confirmed": False}
 
 

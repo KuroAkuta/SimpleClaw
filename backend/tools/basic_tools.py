@@ -416,4 +416,11 @@ def get_all_tools():
     except ImportError:
         pass  # Subagent module not available
 
+    # Add todo tools
+    try:
+        from tools.todo_tools import write_todos, get_todos, clear_todos
+        tools.extend([write_todos, get_todos, clear_todos])
+    except ImportError:
+        pass  # Todo tools not available
+
     return tools
